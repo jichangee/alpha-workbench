@@ -51,7 +51,7 @@ export function PortfolioComparisonResults({ result }: PortfolioComparisonResult
         <div className="chart-card-header">
           <div>
             <h3 id="portfolio-chart-heading">归一化净值</h3>
-            <p>两组起点均为 100，之后权重随价格自然漂移。</p>
+            <p>各组起点均为 100，之后权重随价格自然漂移。</p>
           </div>
         </div>
         <Suspense fallback={<p className="chart-loading" role="status">正在加载走势图…</p>}>

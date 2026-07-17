@@ -1,11 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { PortfolioComparisonResponse } from '../types'
-import { comparisonResultFixture } from '../portfolioComparisonFixture'
+import { comparisonResultFixture, threePortfolioResultFixture } from '../portfolioComparisonFixture'
 import { PortfolioComparisonResults } from './PortfolioComparisonResults'
 
+const setOptionMock = vi.hoisted(() => vi.fn())
+
 vi.mock('echarts/core', () => ({
-  init: () => ({ dispose: vi.fn(), resize: vi.fn(), setOption: vi.fn() }),
+  init: () => ({ dispose: vi.fn(), resize: vi.fn(), setOption: setOptionMock }),
   use: vi.fn(),
 }))
 
@@ -46,5 +48,29 @@ describe('PortfolioComparisonResults', () => {
     render(<PortfolioComparisonResults result={result} />)
 
     expect(screen.getByRole('rowheader', { name: '年化收益' }).closest('tr')).toHaveTextContent('—')
+  })
+
+  it('describes and renders a third portfolio throughout the results', async () => {
+    render(<PortfolioComparisonResults result={threePortfolioResultFixture} />)
+
+    expect(screen.getByText('AAPL 100%')).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: '持仓 3' })).toBeVisible()
+    expect(screen.getByText('各组起点均为 100，之后权重随价格自然漂移。')).toBeVisible()
+    expect(await screen.findByRole('img', { name: '持仓 1、持仓 2、持仓 3的归一化净值走势' })).toBeVisible()
+  })
+
+  it('configures five distinct chart colors and one series per portfolio', async () => {
+    setOptionMock.mockClear()
+    render(<PortfolioComparisonResults result={threePortfolioResultFixture} />)
+    await screen.findByRole('img')
+
+    expect(setOptionMock).toHaveBeenCalledWith(expect.objectContaining({
+      color: ['#087d74', '#e0773c', '#4169a1', '#9a5f9e', '#b58a28'],
+      series: [
+        expect.objectContaining({ name: '持仓 1', lineStyle: expect.objectContaining({ type: 'solid' }) }),
+        expect.objectContaining({ name: '持仓 2', lineStyle: expect.objectContaining({ type: 'dashed' }) }),
+        expect.objectContaining({ name: '持仓 3', lineStyle: expect.objectContaining({ type: 'dotted' }) }),
+      ],
+    }))
   })
 })

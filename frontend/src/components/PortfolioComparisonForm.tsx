@@ -36,21 +36,21 @@ function initialDates(): { start: string; end: string } {
 
 function initialPortfolios(): PortfolioDraft[] {
   return [
-  {
-    id: 1,
-    number: 1,
-    name: '持仓 1',
-    positions: [
-      { id: 1, symbol: 'VOO', weight: '50' },
-      { id: 2, symbol: 'QQQ', weight: '50' },
-    ],
-  },
-  {
-    id: 2,
-    number: 2,
-    name: '持仓 2',
-    positions: [{ id: 3, symbol: 'SOXX', weight: '100' }],
-  },
+    {
+      id: 1,
+      number: 1,
+      name: '持仓 1',
+      positions: [
+        { id: 1, symbol: 'VOO', weight: '50' },
+        { id: 2, symbol: 'QQQ', weight: '50' },
+      ],
+    },
+    {
+      id: 2,
+      number: 2,
+      name: '持仓 2',
+      positions: [{ id: 3, symbol: 'SOXX', weight: '100' }],
+    },
   ]
 }
 

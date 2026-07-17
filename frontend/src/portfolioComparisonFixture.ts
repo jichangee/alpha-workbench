@@ -19,3 +19,16 @@ export const comparisonResultFixture: PortfolioComparisonResponse = {
     },
   ],
 }
+
+export const threePortfolioResultFixture: PortfolioComparisonResponse = {
+  ...comparisonResultFixture,
+  portfolios: [
+    ...comparisonResultFixture.portfolios,
+    {
+      name: '持仓 3',
+      positions: [{ symbol: 'AAPL', weight: 1 }],
+      equity: [100, 165],
+      metrics: { totalReturn: 0.65, cagr: 0.1053, annualizedVolatility: 0.21, maxDrawdown: -0.27 },
+    },
+  ],
+}

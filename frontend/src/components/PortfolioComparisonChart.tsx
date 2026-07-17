@@ -7,6 +7,9 @@ import type { PortfolioComparisonResponse } from '../types'
 
 use([LineChart, GridComponent, LegendComponent, TooltipComponent, SVGRenderer])
 
+const portfolioColors = ['#087d74', '#e0773c', '#4169a1', '#9a5f9e', '#b58a28']
+const portfolioLineStyles = ['solid', 'dashed', 'dotted']
+
 interface PortfolioComparisonChartProps {
   result: PortfolioComparisonResponse
 }
@@ -23,7 +26,7 @@ export function PortfolioComparisonChart({ result }: PortfolioComparisonChartPro
     window.addEventListener('resize', resize)
     chart.setOption({
       animation: false,
-      color: ['#087d74', '#e0773c'],
+      color: portfolioColors,
       grid: { left: 58, right: 24, top: 48, bottom: 40 },
       legend: { top: 8, data: result.portfolios.map((portfolio) => portfolio.name) },
       tooltip: {
@@ -47,7 +50,7 @@ export function PortfolioComparisonChart({ result }: PortfolioComparisonChartPro
         type: 'line',
         data: portfolio.equity,
         showSymbol: false,
-        lineStyle: { width: 2.5, type: index === 1 ? 'dashed' : 'solid' },
+        lineStyle: { width: 2.5, type: portfolioLineStyles[index % portfolioLineStyles.length] },
       })),
     })
 
@@ -63,7 +66,7 @@ export function PortfolioComparisonChart({ result }: PortfolioComparisonChartPro
       className="portfolio-chart-canvas"
       ref={container}
       role="img"
-      aria-label={`${result.portfolios[0].name}与${result.portfolios[1].name}的归一化净值走势`}
+      aria-label={`${result.portfolios.map((portfolio) => portfolio.name).join('、')}的归一化净值走势`}
     />
   )
 }
