@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { terminateChild } from './dev.mjs'
+import { API_PORT, terminateChild } from './dev.mjs'
+
+test('launcher uses the project local API port', () => {
+  assert.equal(API_PORT, 8765)
+})
 
 test('Windows launcher cleanup uses taskkill for the whole child process tree', () => {
   const calls = []

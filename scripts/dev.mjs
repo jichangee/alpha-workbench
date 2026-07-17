@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+export const API_PORT = 8765
 
 export function terminateChild(
   child,
@@ -97,7 +98,7 @@ export function runLauncher({
   start(
     'FastAPI',
     python,
-    ['-m', 'uvicorn', 'app.main:app', '--reload', '--host', '127.0.0.1', '--port', '8000'],
+    ['-m', 'uvicorn', 'app.main:app', '--reload', '--host', '127.0.0.1', '--port', String(API_PORT)],
     path.join(root, 'backend'),
   )
   start('Vite', npm, ['run', 'dev', '--', '--host', '127.0.0.1'], path.join(root, 'frontend'))

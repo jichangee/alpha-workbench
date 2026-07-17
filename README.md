@@ -23,7 +23,7 @@ npm --prefix frontend ci
 npm run dev
 ```
 
-`npm run dev` 会同时启动 FastAPI（`http://127.0.0.1:8000`）和 Vite（终端显示的本地地址，通常为 `http://127.0.0.1:5173`）。按 `Ctrl+C` 会把中断信号转发给两个子进程并停止它们。
+`npm run dev` 会同时启动 FastAPI（`http://127.0.0.1:8765`）和 Vite（终端显示的本地地址，通常为 `http://127.0.0.1:5173`）。按 `Ctrl+C` 会把中断信号转发给两个子进程并停止它们。
 
 Windows PowerShell 请以 `.venv\\Scripts\\Activate.ps1` 激活虚拟环境；其余命令相同。
 
@@ -36,7 +36,7 @@ npm run test
 npm run build
 ```
 
-`npm run build` 生成 `frontend/dist`。此目录存在时，FastAPI 启动后会在 `http://127.0.0.1:8000/` 提供前端静态文件；`/api/*` 仍由 API 路由处理。
+`npm run build` 生成 `frontend/dist`。此目录存在时，FastAPI 启动后会在 `http://127.0.0.1:8765/` 提供前端静态文件；`/api/*` 仍由 API 路由处理。
 
 ## CSV 格式
 
