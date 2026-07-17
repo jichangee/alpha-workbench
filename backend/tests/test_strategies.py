@@ -101,3 +101,31 @@ def test_donchian_rejects_a_nonpositive_window():
             bars_from_closes(list(range(20))),
             StrategyConfig(key="donchian", params={"entry_window": 0, "exit_window": 2}),
         )
+
+
+@pytest.mark.parametrize(
+    ("config", "closes", "message"),
+    [
+        (StrategyConfig(key="buy_hold"), [], "买入并持有策略至少需要 1 个交易日"),
+        (
+            StrategyConfig(key="sma_cross", params={"short_window": 2, "long_window": 3}),
+            [10, 11],
+            "均线交叉策略至少需要 3 个交易日",
+        ),
+        (
+            StrategyConfig(
+                key="rsi_reversal", params={"period": 2, "oversold": 30, "overbought": 70}
+            ),
+            [10, 11],
+            "RSI 反转策略至少需要 3 个交易日",
+        ),
+        (
+            StrategyConfig(key="donchian", params={"entry_window": 3, "exit_window": 2}),
+            [10, 11, 12],
+            "唐奇安通道突破策略至少需要 4 个交易日",
+        ),
+    ],
+)
+def test_strategy_rejects_insufficient_history(config, closes, message):
+    with pytest.raises(StrategyError, match=message):
+        generate_signals(bars_from_closes(closes), config)

@@ -43,6 +43,11 @@ def _within(value: int, label: str, minimum: int, maximum: int) -> None:
         raise StrategyError(f"{label}必须在 {minimum} 到 {maximum} 之间")
 
 
+def _require_history(bars: pd.DataFrame, strategy: str, minimum_bars: int) -> None:
+    if len(bars) < minimum_bars:
+        raise StrategyError(f"{strategy}策略至少需要 {minimum_bars} 个交易日")
+
+
 def _wilder_average(values: pd.Series, period: int) -> pd.Series:
     average = pd.Series(float("nan"), index=values.index, dtype="float64")
     if len(values) <= period:
@@ -57,6 +62,7 @@ def _wilder_average(values: pd.Series, period: int) -> pd.Series:
 
 
 def buy_hold(bars: pd.DataFrame, _params: dict[str, float | int]) -> StrategyOutput:
+    _require_history(bars, "买入并持有", 1)
     target = pd.Series(1, index=bars.index, dtype="int64")
     return StrategyOutput(target=target, indicators={}, warmup=0)
 
@@ -68,6 +74,7 @@ def sma_cross(bars: pd.DataFrame, params: dict[str, float | int]) -> StrategyOut
         raise StrategyError("短均线周期必须小于长均线周期")
     _within(short_window, "短均线周期", 2, 200)
     _within(long_window, "长均线周期", 3, 400)
+    _require_history(bars, "均线交叉", long_window)
 
     short_sma = bars["Close"].rolling(short_window).mean()
     long_sma = bars["Close"].rolling(long_window).mean()
@@ -91,6 +98,7 @@ def rsi_reversal(bars: pd.DataFrame, params: dict[str, float | int]) -> Strategy
     _within(period, "RSI 周期", 2, 100)
     _within(oversold, "超卖阈值", 1, 49)
     _within(overbought, "超买阈值", 51, 99)
+    _require_history(bars, "RSI 反转", period + 1)
 
     changes = bars["Close"].diff()
     gains = changes.clip(lower=0)
@@ -120,6 +128,7 @@ def donchian(bars: pd.DataFrame, params: dict[str, float | int]) -> StrategyOutp
         raise StrategyError("退出通道周期必须为正整数")
     _within(entry_window, "入场通道周期", 2, 252)
     _within(exit_window, "退出通道周期", 2, 252)
+    _require_history(bars, "唐奇安通道突破", max(entry_window, exit_window) + 1)
 
     entry_high = bars["High"].rolling(entry_window).max().shift(1)
     exit_low = bars["Low"].rolling(exit_window).min().shift(1)
