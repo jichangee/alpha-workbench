@@ -24,3 +24,9 @@
 ## 注意事项
 
 静态托管的 `TestClient` 检查在当前 Python 3.13 环境输出了 `blake2b` / `blake2s` 可选哈希算法的解释器日志，但命令以 0 退出，且完整 pytest 套件未出现该日志或失败。
+
+## 后续审查修正
+
+- Windows 清理分支改为调用 `taskkill /pid <pid> /T /F`，确保 FastAPI 热重载等派生进程一并终止；Unix 仍使用进程组信号。终止 helper 支持平台、`spawn` 与 `kill` 注入，并跳过已退出的子进程，避免重复终止和退出竞争。
+- 新增 `scripts/dev.test.mjs`：使用模拟 `spawn` 断言 Windows 分支真实调用的命令及参数，不会终止任何实际进程。
+- README 的 Node 前置条件修正为 Vite 8 锁定引擎范围：`^20.19.0` 或 `>=22.12.0`；当前本机 Node 22 符合。
