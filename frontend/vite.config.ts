@@ -8,6 +8,9 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:8000',
     },
   },
+  build: {
+    chunkSizeWarningLimit: 550,
+  },
   test: {
     environment: 'jsdom',
     globals: true,

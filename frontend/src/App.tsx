@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { fetchStrategies } from './api'
 import { BacktestForm } from './components/BacktestForm'
-import type { RunState, StrategyDefinition } from './types'
+import { ResultsDashboard } from './components/ResultsDashboard'
+import type { BacktestResponse, RunState, StrategyDefinition } from './types'
 
 export default function App() {
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([])
   const [catalogError, setCatalogError] = useState<string>()
   const [loadingCatalog, setLoadingCatalog] = useState(true)
   const [runState, setRunState] = useState<RunState>('idle')
+  const [result, setResult] = useState<BacktestResponse>()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -40,12 +42,12 @@ export default function App() {
           {!loadingCatalog && !catalogError && (
             <BacktestForm
               strategies={strategies}
-              onRun={() => undefined}
+              onRun={setResult}
               onStateChange={setRunState}
             />
           )}
         </aside>
-        <section className="results-placeholder" aria-live="polite">
+        {result ? <ResultsDashboard result={result} /> : <section className="results-placeholder" aria-live="polite">
           <p className="eyebrow">RESULTS</p>
           <h2>准备就绪</h2>
           <p>
@@ -54,7 +56,7 @@ export default function App() {
           <div className="placeholder-grid" aria-hidden="true">
             <span /><span /><span />
           </div>
-        </section>
+        </section>}
       </section>
     </main>
   )
