@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, previewMarketData, runBacktestForDataset } from '../api'
 import type { BacktestResponse, FormState, RunState, StrategyDefinition } from '../types'
+import { PositionModeControls } from './PositionModeControls'
 import { StrategyControls } from './StrategyControls'
 
 interface BacktestFormProps {
@@ -28,6 +29,8 @@ function initialForm(strategies: readonly StrategyDefinition[]): FormState {
     start: localDate(new Date(firstCompleteYear, 0, 1)),
     end: localDate(new Date(lastCompleteYear, 11, 31)),
     file: null,
+    positionMode: 'cash',
+    alternateSymbol: '',
     strategyKey: strategy?.key ?? '',
     params: Object.fromEntries(strategy?.parameters.map((parameter) => [parameter.key, parameter.default]) ?? []),
     initialCash: 100000,
@@ -61,6 +64,12 @@ function validateForm(form: FormState, strategy: StrategyDefinition | undefined)
   } else if (!form.file) {
     return '请上传 CSV 文件。'
   }
+  if (form.positionMode === 'rotate') {
+    if (!form.alternateSymbol.trim()) return '请输入替代股票代码。'
+    if (form.symbol.trim() && form.alternateSymbol.trim().toUpperCase() === form.symbol.trim().toUpperCase()) {
+      return '替代股票不能与主股票相同。'
+    }
+  }
 
   for (const parameter of strategy.parameters) {
     const value = form.params[parameter.key]
@@ -80,16 +89,17 @@ function validateForm(form: FormState, strategy: StrategyDefinition | undefined)
 }
 
 function marketFingerprint(form: FormState): string {
+  const rotation = [form.positionMode, form.alternateSymbol.trim().toUpperCase()]
   if (form.source === 'csv') {
     const file = form.file
-    return ['csv', form.symbol.trim(), file?.name ?? '', file?.size ?? '', file?.lastModified ?? ''].join('|')
+    return ['csv', form.symbol.trim(), file?.name ?? '', file?.size ?? '', file?.lastModified ?? '', ...rotation].join('|')
   }
-  return ['yahoo', form.symbol.trim().toUpperCase(), form.start, form.end].join('|')
+  return ['yahoo', form.symbol.trim().toUpperCase(), form.start, form.end, ...rotation].join('|')
 }
 
 function backtestSignature(form: FormState): string {
   const sortedParams = Object.entries(form.params).sort(([left], [right]) => left.localeCompare(right))
-  return JSON.stringify([form.strategyKey, sortedParams, form.initialCash, form.commission, form.slippageBps])
+  return JSON.stringify([form.strategyKey, sortedParams, form.initialCash, form.commission, form.slippageBps, form.positionMode])
 }
 
 function errorMessage(caught: unknown): string {
@@ -100,6 +110,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
   const [form, setForm] = useState(() => initialForm(strategies))
   const [error, setError] = useState<string>()
   const [datasetId, setDatasetId] = useState<string>()
+  const [alternateDatasetId, setAlternateDatasetId] = useState<string>()
   const [loadedFingerprint, setLoadedFingerprint] = useState<string>()
   const [runningMode, setRunningMode] = useState<RunningMode>(null)
   const activeRequest = useRef<AbortController | null>(null)
@@ -111,7 +122,11 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
   )
   const currentMarketFingerprint = useMemo(() => marketFingerprint(form), [form])
   const currentBacktestSignature = useMemo(() => backtestSignature(form), [form])
-  const datasetReady = Boolean(datasetId && loadedFingerprint === currentMarketFingerprint)
+  const datasetReady = Boolean(
+    datasetId
+    && loadedFingerprint === currentMarketFingerprint
+    && (form.positionMode === 'cash' || alternateDatasetId),
+  )
 
   useEffect(() => () => activeRequest.current?.abort(), [])
 
@@ -125,6 +140,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
     if (datasetId && loadedFingerprint !== currentMarketFingerprint) {
       lastRequestedSignature.current = ''
       setDatasetId(undefined)
+      setAlternateDatasetId(undefined)
       setLoadedFingerprint(undefined)
     }
   }, [currentMarketFingerprint, datasetId, loadedFingerprint])
@@ -150,7 +166,10 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       setRunningMode('automatic')
       onStateChange?.('running')
 
-      runBacktestForDataset(form, datasetId, controller.signal)
+      const pending = form.positionMode === 'rotate'
+        ? runBacktestForDataset(form, datasetId, alternateDatasetId, controller.signal)
+        : runBacktestForDataset(form, datasetId, controller.signal)
+      pending
         .then((result) => {
           if (!controller?.signal.aborted) {
             onRun(result)
@@ -176,7 +195,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       window.clearTimeout(timer)
       controller?.abort()
     }
-  }, [currentBacktestSignature, currentMarketFingerprint, datasetId, datasetReady, form, onRun, onStateChange, strategy])
+  }, [alternateDatasetId, currentBacktestSignature, currentMarketFingerprint, datasetId, datasetReady, form, onRun, onStateChange, strategy])
 
   const updateNumber = (field: 'initialCash' | 'commission' | 'slippageBps', value: string) => {
     setForm((current) => ({ ...current, [field]: Number(value) }))
@@ -214,10 +233,30 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
 
     try {
       const preview = await previewMarketData(submittedForm, controller.signal)
-      const result = await runBacktestForDataset(submittedForm, preview.datasetId, controller.signal)
+      let submittedAlternateDatasetId: string | undefined
+      if (submittedForm.positionMode === 'rotate') {
+        const alternatePreview = await previewMarketData({
+          ...submittedForm,
+          source: 'yahoo',
+          symbol: submittedForm.alternateSymbol,
+          start: preview.start,
+          end: preview.end,
+          file: null,
+        }, controller.signal)
+        submittedAlternateDatasetId = alternatePreview.datasetId
+      }
+      const result = submittedForm.positionMode === 'rotate'
+        ? await runBacktestForDataset(
+          submittedForm,
+          preview.datasetId,
+          submittedAlternateDatasetId,
+          controller.signal,
+        )
+        : await runBacktestForDataset(submittedForm, preview.datasetId, controller.signal)
       if (!controller.signal.aborted) {
         lastRequestedSignature.current = submittedBacktestSignature
         setDatasetId(preview.datasetId)
+        setAlternateDatasetId(submittedAlternateDatasetId)
         setLoadedFingerprint(submittedMarketFingerprint)
         onRun(result)
         onStateChange?.('success')
@@ -306,6 +345,18 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
 
       <fieldset>
         <legend>交易假设</legend>
+        <PositionModeControls
+          mode={form.positionMode}
+          alternateSymbol={form.alternateSymbol}
+          onModeChange={(positionMode) => {
+            setForm((current) => ({ ...current, positionMode }))
+            setError(undefined)
+          }}
+          onAlternateSymbolChange={(alternateSymbol) => {
+            setForm((current) => ({ ...current, alternateSymbol }))
+            setError(undefined)
+          }}
+        />
         <div className="field-grid">
           <label>
             初始资金（美元）
@@ -325,7 +376,9 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       {error && <p className="form-error" role="alert">{error}</p>}
       {!datasetReady ? (
         <button className="run-button" type="submit" disabled={runningMode !== null || strategies.length === 0}>
-          {runningMode === 'loading' ? '正在装载行情…' : '加载行情并开始回测'}
+          {runningMode === 'loading'
+            ? form.positionMode === 'rotate' ? '正在装载两只股票…' : '正在装载行情…'
+            : form.positionMode === 'rotate' ? '加载两只股票并开始回测' : '加载行情并开始回测'}
         </button>
       ) : (
         <p className={`auto-run-status${runningMode === 'automatic' ? ' is-running' : ''}`} aria-live="polite">

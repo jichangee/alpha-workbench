@@ -1,4 +1,5 @@
 export type MarketDataSource = 'yahoo' | 'csv'
+export type PositionMode = 'cash' | 'rotate'
 
 export interface StrategyParameter {
   key: string
@@ -29,6 +30,8 @@ export interface FormState {
   start: string
   end: string
   file: File | null
+  positionMode: PositionMode
+  alternateSymbol: string
   strategyKey: string
   params: Record<string, number>
   initialCash: number
@@ -61,7 +64,10 @@ export interface BacktestMetadata {
   strategyKey: string
   start: string
   end: string
-  execution: 'next_open'
+  execution: 'first_open_then_next_open'
+  positionMode?: PositionMode
+  primarySymbol?: string
+  alternateSymbol?: string | null
   warmup: number
   initialCash: number
   commission: number
@@ -93,6 +99,7 @@ export interface BacktestSeries {
   benchmark: Array<number | null>
   drawdown: Array<number | null>
   benchmarkDrawdown: Array<number | null>
+  positionSymbol?: Array<string | null>
 }
 
 export interface BacktestIndicators {
@@ -101,6 +108,7 @@ export interface BacktestIndicators {
 
 export interface BacktestFill {
   date: string
+  symbol?: string
   side: 'buy' | 'sell'
   price: number
   shares: number
@@ -109,6 +117,7 @@ export interface BacktestFill {
 }
 
 export interface BacktestTrade {
+  symbol?: string
   entryDate: string
   entryPrice: number
   shares: number

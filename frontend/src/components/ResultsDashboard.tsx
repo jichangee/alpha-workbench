@@ -21,12 +21,19 @@ export function ResultsDashboard({ result }: ResultsDashboardProps) {
     { id: 'price', label: '价格与信号' },
   ]
   const title = tabs.find((tab) => tab.id === activeTab)?.label
+  const symbolPair = result.metadata.positionMode === 'rotate' && result.metadata.alternateSymbol
+    ? `${result.metadata.primarySymbol ?? '主标的'} ↔ ${result.metadata.alternateSymbol}`
+    : result.metadata.primarySymbol
 
   return (
     <section className="results-dashboard" aria-label="回测结果">
       <header className="results-heading">
-        <div><p className="eyebrow">BACKTEST RESULTS</p><h2>{strategyLabel(result.metadata.strategyKey)} 回测结果</h2></div>
-        <p>{result.metadata.start} 至 {result.metadata.end} · 次日开盘成交</p>
+        <div>
+          <p className="eyebrow">BACKTEST RESULTS</p>
+          <h2>{strategyLabel(result.metadata.strategyKey)} 回测结果</h2>
+          {symbolPair && <p className="result-symbols">{symbolPair}</p>}
+        </div>
+        <p>{result.metadata.start} 至 {result.metadata.end} · 首日开盘建仓 · 后续次日开盘调仓</p>
       </header>
       <MetricCards metrics={result.metrics} />
       {result.warnings.length > 0 && <p className="result-warning" role="status">{result.warnings.join(' ')}</p>}

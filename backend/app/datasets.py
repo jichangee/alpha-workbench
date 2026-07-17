@@ -30,3 +30,6 @@ class DatasetStore:
 
     def get(self, dataset_id: str) -> pd.DataFrame:
         return self._datasets[dataset_id].frame.copy(deep=True)
+
+    def get_metadata(self, dataset_id: str) -> DatasetMetadata:
+        return self._datasets[dataset_id].metadata.model_copy(deep=True)

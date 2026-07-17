@@ -52,6 +52,8 @@ def serialize_backtest(
     signals: StrategyOutput,
     engine: EngineResult,
     metrics: Metrics,
+    primary_symbol: str,
+    alternate_symbol: str | None,
 ) -> BacktestResponse:
     """Build the public response without leaking pandas, NumPy, NaN, or Infinity."""
     equity = engine.equity
@@ -61,7 +63,10 @@ def serialize_backtest(
             strategy_key=request.strategy.key,
             start=pd.Timestamp(bars.index[0]).date(),
             end=pd.Timestamp(bars.index[-1]).date(),
-            execution="next_open",
+            execution="first_open_then_next_open",
+            position_mode=request.positionMode,
+            primary_symbol=primary_symbol,
+            alternate_symbol=alternate_symbol,
             warmup=signals.warmup,
             initial_cash=json_safe(request.initialCash),
             commission=json_safe(request.commission),
@@ -91,11 +96,13 @@ def serialize_backtest(
             benchmark=_series_values(equity["benchmark"]),
             drawdown=_series_values(equity["drawdown"]),
             benchmark_drawdown=_series_values(equity["benchmark_drawdown"]),
+            position_symbol=[json_safe(value) for value in equity["position_symbol"].tolist()],
         ),
         indicators={name: _series_values(values) for name, values in signals.indicators.items()},
         fills=[
             BacktestFill(
                 date=json_safe(fill.date),
+                symbol=fill.symbol,
                 side=fill.side,
                 price=json_safe(fill.price),
                 shares=json_safe(fill.shares),
@@ -106,6 +113,7 @@ def serialize_backtest(
         ],
         trades=[
             BacktestTrade(
+                symbol=trade.symbol,
                 entry_date=json_safe(trade.entry_date),
                 entry_price=json_safe(trade.entry_price),
                 shares=json_safe(trade.shares),

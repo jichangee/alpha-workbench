@@ -62,8 +62,8 @@ def test_fixed_sma_scenario_has_exact_fill_dates_and_ending_equity():
     result = run_fixed_fixture(strategy="sma_cross", short_window=2, long_window=3)
 
     assert [fill.date.strftime("%Y-%m-%d") for fill in result.fills] == [
-        "2024-01-05",
+        "2023-12-29",
         "2024-01-10",
     ]
-    assert result.metadata.execution == "next_open"
+    assert result.metadata.execution == "first_open_then_next_open"
     assert result.metrics.ending_equity == pytest.approx(EXPECTED_ENDING_EQUITY)

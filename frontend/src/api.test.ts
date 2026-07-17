@@ -8,6 +8,8 @@ const yahooInput: FormState = {
   start: '2021-01-01',
   end: '2021-12-31',
   file: null,
+  positionMode: 'cash',
+  alternateSymbol: '',
   strategyKey: 'sma_cross',
   params: { short_window: 20, long_window: 50 },
   initialCash: 125000,
@@ -16,7 +18,7 @@ const yahooInput: FormState = {
 }
 
 const backtestFixture: BacktestResponse = {
-  metadata: { datasetId: 'dataset-42', strategyKey: 'sma_cross', start: '2021-01-01', end: '2021-12-31', execution: 'next_open', warmup: 50, initialCash: 125000, commission: 1.25, slippageBps: 7 },
+  metadata: { datasetId: 'dataset-42', strategyKey: 'sma_cross', start: '2021-01-01', end: '2021-12-31', execution: 'first_open_then_next_open', warmup: 50, initialCash: 125000, commission: 1.25, slippageBps: 7 },
   metrics: { endingEquity: 130000, totalReturn: 0.04, cagr: 0.04, annualizedVolatility: 0.2, sharpeRatio: 0.5, maxDrawdown: -0.1, tradeCount: 2, winRate: 0.5 },
   series: { dates: ['2021-01-01'], open: [100], high: [101], low: [99], close: [100], cash: [0], shares: [1], holdings: [100], equity: [100], strategy: [1], benchmark: [1], drawdown: [0], benchmarkDrawdown: [0] },
   indicators: {}, fills: [], trades: [], warnings: [],
@@ -55,6 +57,7 @@ describe('backtest API workflow', () => {
         method: 'POST',
         body: JSON.stringify({
           datasetId: 'dataset-42',
+          positionMode: 'cash',
           strategy: { key: 'sma_cross', params: { short_window: 20, long_window: 50 } },
           initialCash: 125000,
           commission: 1.25,
@@ -85,6 +88,27 @@ describe('backtest API workflow', () => {
       method: 'POST',
       body: JSON.stringify({
         datasetId: 'dataset-42',
+        positionMode: 'cash',
+        strategy: { key: 'sma_cross', params: { short_window: 20, long_window: 50 } },
+        initialCash: 125000,
+        commission: 1.25,
+        slippageBps: 7,
+      }),
+    }))
+  })
+
+  it('posts both dataset IDs in rotation mode', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(backtestFixture))
+    const rotationInput = { ...yahooInput, positionMode: 'rotate' as const, alternateSymbol: 'QQQ' }
+
+    await runBacktestForDataset(rotationInput, 'dataset-42', 'dataset-qqq')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/backtests', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        datasetId: 'dataset-42',
+        positionMode: 'rotate',
+        alternateDatasetId: 'dataset-qqq',
         strategy: { key: 'sma_cross', params: { short_window: 20, long_window: 50 } },
         initialCash: 125000,
         commission: 1.25,

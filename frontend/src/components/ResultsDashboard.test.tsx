@@ -11,7 +11,7 @@ vi.mock('echarts/core', () => ({
 }))
 
 const openPositionFixture: BacktestResponse = {
-  metadata: { datasetId: 'demo', strategyKey: 'sma_cross', start: '2024-01-02', end: '2024-01-03', execution: 'next_open', warmup: 20, initialCash: 10000, commission: 1, slippageBps: 5 },
+  metadata: { datasetId: 'demo', strategyKey: 'sma_cross', start: '2024-01-02', end: '2024-01-03', execution: 'first_open_then_next_open', warmup: 20, initialCash: 10000, commission: 1, slippageBps: 5 },
   metrics: { endingEquity: 10100, totalReturn: 0.01, cagr: 0.01, annualizedVolatility: 0.1, sharpeRatio: 0.5, maxDrawdown: -0.02, tradeCount: 0, winRate: null },
   series: {
     dates: ['2024-01-02', '2024-01-03'], open: [100, 101], high: [102, 103], low: [99, 100], close: [101, 102], cash: [0, 0], shares: [100, 100], holdings: [10100, 10200], equity: [10000, 10100], strategy: [1, 1.01], benchmark: [1, 1.02], drawdown: [0, -0.01], benchmarkDrawdown: [0, 0],
@@ -72,5 +72,25 @@ describe('ResultsDashboard', () => {
     expect(screen.getByText('持仓中')).toBeVisible()
     expect(screen.getByText('+$50.00')).toBeVisible()
     expect(screen.getByText('+$47.50')).toBeVisible()
+  })
+
+  it('labels rotation symbols, first-day execution, and each trade symbol', () => {
+    const rotationResult: BacktestResponse = {
+      ...openPositionFixture,
+      metadata: {
+        ...openPositionFixture.metadata,
+        positionMode: 'rotate',
+        primarySymbol: 'SPY',
+        alternateSymbol: 'QQQ',
+      },
+      trades: [{ ...openPositionFixture.trades[0], symbol: 'QQQ' }],
+    }
+
+    render(<ResultsDashboard result={rotationResult} />)
+
+    expect(screen.getByText('SPY ↔ QQQ')).toBeVisible()
+    expect(screen.getByText(/首日开盘建仓 · 后续次日开盘调仓/)).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: '标的' })).toBeVisible()
+    expect(screen.getByRole('cell', { name: 'QQQ' })).toBeVisible()
   })
 })

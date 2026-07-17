@@ -24,12 +24,10 @@ def test_buy_and_hold_targets_full_position_from_the_first_bar():
     assert output.warmup == 0
 
 
-def test_buy_and_hold_requires_a_next_session_for_open_execution():
-    with pytest.raises(
-        InsufficientHistoryError,
-        match="买入并持有策略至少需要 2 个交易日，才能在次日开盘买入",
-    ):
-        generate_signals(bars_from_closes([10]), StrategyConfig(key="buy_hold"))
+def test_buy_and_hold_can_enter_on_the_only_session():
+    output = generate_signals(bars_from_closes([10]), StrategyConfig(key="buy_hold"))
+
+    assert output.target.tolist() == [1]
 
 
 def test_sma_cross_changes_target_only_after_a_completed_cross():
@@ -39,7 +37,7 @@ def test_sma_cross_changes_target_only_after_a_completed_cross():
         bars, StrategyConfig(key="sma_cross", params={"short_window": 2, "long_window": 3})
     )
 
-    assert output.target.tolist() == [0, 0, 0, 1, 1, 0]
+    assert output.target.tolist() == [1, 1, 1, 1, 1, 0]
     assert pd.isna(output.indicators["short_sma"].iloc[0])
     assert output.indicators["short_sma"].iloc[1:].tolist() == [10.0, 10.0, 10.5, 11.5, 10.5]
     assert output.indicators["long_sma"].iloc[2:].tolist() == [10.0, 10.333333333333334, 11.0, 10.666666666666666]
@@ -65,7 +63,7 @@ def test_rsi_reversal_uses_wilder_smoothing_and_crosses_to_change_target():
     )
 
     assert output.indicators["rsi"].iloc[4] == pytest.approx(75.0)
-    assert output.target.tolist() == [0, 0, 0, 1, 1, 0]
+    assert output.target.tolist() == [1, 1, 1, 1, 1, 0]
     assert output.warmup == 2
 
 
@@ -99,7 +97,7 @@ def test_donchian_uses_prior_bars_only_for_entry_and_exit_channels():
 
     assert output.indicators["entry_high"].iloc[3:].tolist() == [12.0, 13.0]
     assert output.indicators["exit_low"].iloc[2:].tolist() == [10.0, 11.0, 12.0]
-    assert output.target.tolist() == [0, 0, 0, 1, 0]
+    assert output.target.tolist() == [1, 1, 1, 1, 0]
     assert output.warmup == 3
 
 
@@ -117,7 +115,7 @@ def test_donchian_rejects_a_nonpositive_window():
         (
             StrategyConfig(key="buy_hold"),
             [],
-            "买入并持有策略至少需要 2 个交易日，才能在次日开盘买入",
+            "买入并持有策略至少需要 1 个交易日",
         ),
         (
             StrategyConfig(key="sma_cross", params={"short_window": 2, "long_window": 3}),

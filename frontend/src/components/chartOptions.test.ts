@@ -5,7 +5,7 @@ import { buildPriceOption } from './PriceChart'
 import type { BacktestResponse } from '../types'
 
 const result: BacktestResponse = {
-  metadata: { datasetId: 'chart-test', strategyKey: 'sma_cross', start: '2024-01-02', end: '2024-01-03', execution: 'next_open', warmup: 20, initialCash: 10000, commission: 1, slippageBps: 5 },
+  metadata: { datasetId: 'chart-test', strategyKey: 'sma_cross', start: '2024-01-02', end: '2024-01-03', execution: 'first_open_then_next_open', warmup: 20, initialCash: 10000, commission: 1, slippageBps: 5, primarySymbol: 'SPY' },
   metrics: { endingEquity: 10100, totalReturn: 0.01, cagr: 0.01, annualizedVolatility: 0.1, sharpeRatio: 0.5, maxDrawdown: -0.02, tradeCount: 1, winRate: 1 },
   series: { dates: ['2024-01-02', '2024-01-03'], open: [100, 101], high: [103, 104], low: [99, 98], close: [102, 100], cash: [0, 0], shares: [10, 10], holdings: [1020, 1000], equity: [10000, 10100], strategy: [1, 1.01], benchmark: [1, 1.02], drawdown: [0, -0.02], benchmarkDrawdown: [0, -0.01] },
   indicators: { short_sma: [100, 101] },
@@ -71,6 +71,20 @@ describe('chart option builders', () => {
     expect(option.dataZoom).toEqual([
       expect.objectContaining({ type: 'inside', xAxisIndex: 0 }),
     ])
+  })
+
+  it('keeps alternate-stock fills off the primary price chart', () => {
+    const option = buildPriceOption({
+      ...result,
+      fills: [
+        { ...result.fills[0], symbol: 'SPY' },
+        { ...result.fills[1], symbol: 'QQQ' },
+      ],
+    })
+    const series = option.series as Array<{ markPoint?: { data: Array<{ value: string }> } }>
+
+    expect(series[0].markPoint?.data).toHaveLength(1)
+    expect(series[0].markPoint?.data[0].value).toBe('买')
   })
 
   it('builds a negative drawdown area series', () => {

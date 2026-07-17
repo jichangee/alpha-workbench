@@ -24,8 +24,8 @@ class StrategyOutput:
 
 
 def _target_from_events(index: pd.Index, buy: pd.Series, sell: pd.Series) -> pd.Series:
-    target = pd.Series(0, index=index, dtype="int64")
-    position = 0
+    target = pd.Series(1, index=index, dtype="int64")
+    position = 1
     for offset in range(len(target)):
         if bool(buy.iloc[offset]):
             position = 1
@@ -66,10 +66,8 @@ def _wilder_average(values: pd.Series, period: int) -> pd.Series:
 
 
 def buy_hold(bars: pd.DataFrame, _params: dict[str, float | int]) -> StrategyOutput:
-    if len(bars) < 2:
-        raise InsufficientHistoryError(
-            "买入并持有策略至少需要 2 个交易日，才能在次日开盘买入"
-        )
+    if len(bars) < 1:
+        raise InsufficientHistoryError("买入并持有策略至少需要 1 个交易日")
     target = pd.Series(1, index=bars.index, dtype="int64")
     return StrategyOutput(target=target, indicators={}, warmup=0)
 

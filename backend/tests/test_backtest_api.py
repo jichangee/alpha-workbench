@@ -57,6 +57,28 @@ def long_dataset_id(client):
     )
 
 
+def put_bars(symbol: str, dates: pd.DatetimeIndex, closes: list[float]) -> str:
+    close_series = pd.Series(closes, index=dates, dtype="float64")
+    bars = pd.DataFrame(
+        {
+            "Open": close_series,
+            "High": close_series + 1,
+            "Low": close_series - 1,
+            "Close": close_series,
+        },
+        index=dates,
+    )
+    return main.dataset_store.put(
+        bars,
+        DatasetMetadata(
+            symbol=symbol,
+            source="csv",
+            start=dates[0].date(),
+            end=dates[-1].date(),
+        ),
+    )
+
+
 def test_backtest_returns_json_safe_metrics_series_and_trades(client, dataset_id):
     response = client.post(
         "/api/backtests",
@@ -83,7 +105,7 @@ def test_backtest_returns_json_safe_metrics_series_and_trades(client, dataset_id
         "trades",
         "warnings",
     }
-    assert body["metadata"]["execution"] == "next_open"
+    assert body["metadata"]["execution"] == "first_open_then_next_open"
     assert len(body["series"]["equity"]) == FIXTURE_ROW_COUNT
     assert body["series"]["dates"] == [
         "2024-01-02",
@@ -108,7 +130,10 @@ def test_backtest_applies_documented_financial_defaults(client, dataset_id):
         "strategyKey": "buy_hold",
         "start": "2024-01-02",
         "end": "2024-01-05",
-        "execution": "next_open",
+        "execution": "first_open_then_next_open",
+        "positionMode": "cash",
+        "primarySymbol": "SPY",
+        "alternateSymbol": None,
         "warmup": 0,
         "initialCash": 100000.0,
         "commission": 0.0,
@@ -116,7 +141,7 @@ def test_backtest_applies_documented_financial_defaults(client, dataset_id):
     }
 
 
-def test_buy_hold_with_one_bar_returns_backtest_error_instead_of_empty_success(client):
+def test_buy_hold_with_one_bar_buys_on_that_session(client):
     only_date = pd.Timestamp("2024-01-02")
     bars = pd.DataFrame(
         {"Open": [100.0], "High": [101.0], "Low": [99.0], "Close": [100.0]},
@@ -137,12 +162,8 @@ def test_buy_hold_with_one_bar_returns_backtest_error_instead_of_empty_success(c
         json={"datasetId": dataset_id, "strategy": {"key": "buy_hold"}},
     )
 
-    assert response.status_code == 400
-    assert response.json() == {
-        "code": "BACKTEST_ERROR",
-        "message": "买入并持有策略至少需要 2 个交易日，才能在次日开盘买入",
-        "fields": {},
-    }
+    assert response.status_code == 200
+    assert response.json()["fills"][0]["date"] == "2024-01-02"
 
 
 def test_backtest_applies_sma_defaults_from_strategy_metadata(client, long_dataset_id):
@@ -206,19 +227,21 @@ def test_backtest_serializes_fill_and_open_trade_dates(client, dataset_id):
     body = response.json()
     assert body["fills"] == [
         {
-            "date": "2024-01-03",
+            "date": "2024-01-02",
+            "symbol": "SPY",
             "side": "buy",
-            "price": 102.0,
-            "shares": 9,
+            "price": 100.0,
+            "shares": 10,
             "commission": 0.0,
-            "notional": 918.0,
+            "notional": 1000.0,
         }
     ]
     assert body["trades"] == [
         {
-            "entryDate": "2024-01-03",
-            "entryPrice": 102.0,
-            "shares": 9,
+            "symbol": "SPY",
+            "entryDate": "2024-01-02",
+            "entryPrice": 100.0,
+            "shares": 10,
             "exitDate": None,
             "exitPrice": None,
             "grossPnl": None,
@@ -248,6 +271,107 @@ def test_backtest_reports_a_missing_dataset_with_a_chinese_404(client):
         "message": "未找到数据集，请重新加载行情数据",
         "fields": {},
     }
+
+
+def test_rotation_requires_an_alternate_dataset(client, dataset_id):
+    response = client.post(
+        "/api/backtests",
+        json={
+            "datasetId": dataset_id,
+            "strategy": {"key": "buy_hold"},
+            "positionMode": "rotate",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_rotation_reports_a_missing_alternate_dataset(client, dataset_id):
+    response = client.post(
+        "/api/backtests",
+        json={
+            "datasetId": dataset_id,
+            "alternateDatasetId": "does-not-exist",
+            "strategy": {"key": "buy_hold"},
+            "positionMode": "rotate",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_rotation_rejects_the_same_symbol(client, dataset_id):
+    dates = pd.bdate_range("2024-01-02", periods=4)
+    alternate_id = put_bars("SPY", dates, [20, 21, 22, 23])
+
+    response = client.post(
+        "/api/backtests",
+        json={
+            "datasetId": dataset_id,
+            "alternateDatasetId": alternate_id,
+            "strategy": {"key": "buy_hold"},
+            "positionMode": "rotate",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["fields"] == {"alternateDatasetId": "替代标的不能与主标的相同"}
+
+
+def test_rotation_rejects_datasets_without_common_sessions(client, dataset_id):
+    dates = pd.bdate_range("2025-01-02", periods=4)
+    alternate_id = put_bars("QQQ", dates, [20, 21, 22, 23])
+
+    response = client.post(
+        "/api/backtests",
+        json={
+            "datasetId": dataset_id,
+            "alternateDatasetId": alternate_id,
+            "strategy": {"key": "buy_hold"},
+            "positionMode": "rotate",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "主标的和替代标的没有共同交易日"
+
+
+def test_rotation_aligns_sessions_and_serializes_symbols(client):
+    primary_dates = pd.bdate_range("2024-01-02", periods=6)
+    alternate_dates = pd.bdate_range("2024-01-03", periods=6)
+    primary_id = put_bars("SPY", primary_dates, [10, 10, 10, 10, 9, 9])
+    alternate_id = put_bars("QQQ", alternate_dates, [20, 20, 20, 20, 20, 20])
+
+    response = client.post(
+        "/api/backtests",
+        json={
+            "datasetId": primary_id,
+            "alternateDatasetId": alternate_id,
+            "strategy": {
+                "key": "sma_cross",
+                "params": {"short_window": 2, "long_window": 3},
+            },
+            "positionMode": "rotate",
+            "initialCash": 1000,
+            "commission": 1,
+            "slippageBps": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["metadata"]["positionMode"] == "rotate"
+    assert body["metadata"]["primarySymbol"] == "SPY"
+    assert body["metadata"]["alternateSymbol"] == "QQQ"
+    assert body["metadata"]["execution"] == "first_open_then_next_open"
+    assert body["series"]["dates"] == [date.date().isoformat() for date in primary_dates[1:]]
+    assert body["series"]["positionSymbol"][-1] == "QQQ"
+    assert [(fill["symbol"], fill["side"]) for fill in body["fills"]] == [
+        ("SPY", "buy"),
+        ("SPY", "sell"),
+        ("QQQ", "buy"),
+    ]
+    assert {trade["symbol"] for trade in body["trades"]} == {"SPY", "QQQ"}
 
 
 def test_backtest_maps_invalid_strategy_settings_to_field_validation(client, dataset_id):

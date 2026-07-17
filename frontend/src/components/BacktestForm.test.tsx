@@ -51,7 +51,7 @@ const previewFixture: MarketDataPreview = {
 }
 
 const successfulResult: BacktestResponse = {
-  metadata: { datasetId: 'dataset-42', strategyKey: 'buy_hold', start: '2021-01-01', end: '2021-12-31', execution: 'next_open', warmup: 0, initialCash: 100000, commission: 0, slippageBps: 5 },
+  metadata: { datasetId: 'dataset-42', strategyKey: 'buy_hold', start: '2021-01-01', end: '2021-12-31', execution: 'first_open_then_next_open', warmup: 0, initialCash: 100000, commission: 0, slippageBps: 5 },
   metrics: { endingEquity: 100000, totalReturn: 0, cagr: null, annualizedVolatility: null, sharpeRatio: null, maxDrawdown: 0, tradeCount: 0, winRate: null },
   series: { dates: [], open: [], high: [], low: [], close: [], cash: [], shares: [], holdings: [], equity: [], strategy: [], benchmark: [], drawdown: [], benchmarkDrawdown: [] },
   indicators: {}, fills: [], trades: [], warnings: [],
@@ -73,6 +73,8 @@ async function loadMarketData() {
 describe('BacktestForm', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    previewMarketDataMock.mockReset()
+    runBacktestForDatasetMock.mockReset()
     previewMarketDataMock.mockResolvedValue(previewFixture)
     runBacktestForDatasetMock.mockResolvedValue(successfulResult)
   })
@@ -117,6 +119,54 @@ describe('BacktestForm', () => {
 
     expect(screen.getByLabelText('CSV 文件')).toBeVisible()
     expect(screen.queryByLabelText('开始日期')).not.toBeInTheDocument()
+  })
+
+  it('validates the alternate symbol in rotation mode', async () => {
+    const user = userEvent.setup()
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: '卖出后换仓' }))
+    await user.click(screen.getByRole('button', { name: '加载两只股票并开始回测' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('请输入替代股票代码。')
+
+    await user.type(screen.getByLabelText('替代股票代码'), 'SPY')
+    await user.click(screen.getByRole('button', { name: '加载两只股票并开始回测' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('替代股票不能与主股票相同。')
+  })
+
+  it('loads both stocks and reuses both dataset IDs for automatic backtests', async () => {
+    const user = userEvent.setup()
+    const alternatePreview = { ...previewFixture, datasetId: 'dataset-qqq', symbol: 'QQQ' }
+    previewMarketDataMock.mockReset()
+    previewMarketDataMock.mockResolvedValueOnce(previewFixture).mockResolvedValueOnce(alternatePreview)
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: '卖出后换仓' }))
+    await user.type(screen.getByLabelText('替代股票代码'), 'qqq')
+
+    await user.click(screen.getByRole('button', { name: '加载两只股票并开始回测' }))
+    await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(1))
+
+    expect(previewMarketDataMock).toHaveBeenCalledTimes(2)
+    expect(previewMarketDataMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ source: 'yahoo', symbol: 'QQQ', start: previewFixture.start, end: previewFixture.end }),
+      expect.any(AbortSignal),
+    )
+    expect(runBacktestForDatasetMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ positionMode: 'rotate', alternateSymbol: 'QQQ' }),
+      'dataset-42',
+      'dataset-qqq',
+      expect.any(AbortSignal),
+    )
+
+    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
+    expect(previewMarketDataMock).toHaveBeenCalledTimes(2)
+    expect(runBacktestForDatasetMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ strategyKey: 'sma_cross' }),
+      'dataset-42',
+      'dataset-qqq',
+      expect.any(AbortSignal),
+    )
   })
 
   it('loads market data before running the first backtest', async () => {

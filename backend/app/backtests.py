@@ -34,8 +34,29 @@ def run_backtest(store: DatasetStore, request: BacktestRequest) -> BacktestRespo
     """Run a stored dataset through signals, execution, metrics, and serialization."""
     try:
         bars = store.get(request.datasetId)
+        primary_metadata = store.get_metadata(request.datasetId)
     except KeyError as error:
         raise DatasetNotFoundError(request.datasetId) from error
+
+    alternate_bars = None
+    alternate_symbol = None
+    if request.positionMode == "rotate":
+        try:
+            alternate_bars = store.get(request.alternateDatasetId or "")
+            alternate_metadata = store.get_metadata(request.alternateDatasetId or "")
+        except KeyError as error:
+            raise DatasetNotFoundError(request.alternateDatasetId or "") from error
+        if alternate_metadata.symbol == primary_metadata.symbol:
+            raise BacktestValidationError(
+                "替代标的不能与主标的相同",
+                {"alternateDatasetId": "替代标的不能与主标的相同"},
+            )
+        common_dates = bars.index.intersection(alternate_bars.index)
+        if common_dates.empty:
+            raise BacktestError("主标的和替代标的没有共同交易日")
+        bars = bars.loc[common_dates]
+        alternate_bars = alternate_bars.loc[common_dates]
+        alternate_symbol = alternate_metadata.symbol
 
     try:
         signals = generate_signals(bars, _strategy_with_defaults(request.strategy))
@@ -51,6 +72,9 @@ def run_backtest(store: DatasetStore, request: BacktestRequest) -> BacktestRespo
             request.initialCash,
             request.commission,
             request.slippageBps,
+            primary_symbol=primary_metadata.symbol,
+            alternate_bars=alternate_bars,
+            alternate_symbol=alternate_symbol,
         )
         metrics = calculate_metrics(
             engine.equity["total"], engine.trades, request.initialCash
@@ -59,7 +83,14 @@ def run_backtest(store: DatasetStore, request: BacktestRequest) -> BacktestRespo
         raise BacktestError(str(error)) from error
 
     return serialize_backtest(
-        request.datasetId, request, bars, signals, engine, metrics
+        request.datasetId,
+        request,
+        bars,
+        signals,
+        engine,
+        metrics,
+        primary_metadata.symbol,
+        alternate_symbol,
     )
 
 

@@ -32,7 +32,7 @@ export default function App() {
           <h1>美股策略回测</h1>
           <p>用历史日线检验交易假设；结果仅供教育与研究，不构成投资建议。</p>
         </div>
-        <span className="market-badge">日线 · 做多 · 单标的</span>
+        <span className="market-badge">日线 · 做多 · 支持双标的换仓</span>
       </header>
 
       <section className="workspace" aria-label="回测配置工作区">

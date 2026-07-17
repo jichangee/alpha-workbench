@@ -69,9 +69,11 @@ export async function previewMarketData(
   })
 }
 
-export function toBacktestRequest(input: FormState, datasetId: string) {
+export function toBacktestRequest(input: FormState, datasetId: string, alternateDatasetId?: string) {
   return {
     datasetId,
+    positionMode: input.positionMode,
+    ...(input.positionMode === 'rotate' && alternateDatasetId ? { alternateDatasetId } : {}),
     strategy: { key: input.strategyKey, params: input.params },
     initialCash: input.initialCash,
     commission: input.commission,
@@ -82,13 +84,16 @@ export function toBacktestRequest(input: FormState, datasetId: string) {
 export async function runBacktestForDataset(
   input: FormState,
   datasetId: string,
+  alternateDatasetIdOrSignal?: string | AbortSignal,
   signal?: AbortSignal,
 ): Promise<BacktestResponse> {
+  const alternateDatasetId = typeof alternateDatasetIdOrSignal === 'string' ? alternateDatasetIdOrSignal : undefined
+  const requestSignal = typeof alternateDatasetIdOrSignal === 'string' ? signal : alternateDatasetIdOrSignal
   return request<BacktestResponse>('/api/backtests', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(toBacktestRequest(input, datasetId)),
-    signal,
+    body: JSON.stringify(toBacktestRequest(input, datasetId, alternateDatasetId)),
+    signal: requestSignal,
   })
 }
 
@@ -97,5 +102,16 @@ export async function runBacktest(
   signal?: AbortSignal,
 ): Promise<BacktestResponse> {
   const preview = await previewMarketData(input, signal)
-  return runBacktestForDataset(input, preview.datasetId, signal)
+  if (input.positionMode === 'cash') {
+    return runBacktestForDataset(input, preview.datasetId, signal)
+  }
+  const alternatePreview = await previewMarketData({
+    ...input,
+    source: 'yahoo',
+    symbol: input.alternateSymbol,
+    start: preview.start,
+    end: preview.end,
+    file: null,
+  }, signal)
+  return runBacktestForDataset(input, preview.datasetId, alternatePreview.datasetId, signal)
 }

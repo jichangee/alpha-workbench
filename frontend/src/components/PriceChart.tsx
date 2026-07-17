@@ -33,6 +33,9 @@ export function buildPriceOption(result: BacktestResponse) {
     smooth: true,
     lineStyle: { width: 1.5 },
   }))
+  const primaryFills = result.metadata.primarySymbol
+    ? result.fills.filter((fill) => !fill.symbol || fill.symbol === result.metadata.primarySymbol)
+    : result.fills
   return {
     animation: false,
     color: ['#3877a8', '#c78a28', '#805ad5', '#b55b4a'],
@@ -53,7 +56,7 @@ export function buildPriceOption(result: BacktestResponse) {
         itemStyle: { color: '#087d74', color0: '#c6534a', borderColor: '#087d74', borderColor0: '#c6534a' },
         markPoint: {
           symbolSize: 32,
-          data: result.fills.map((fill) => ({
+          data: primaryFills.map((fill) => ({
             coord: [fill.date, fill.price],
             value: fill.side === 'buy' ? '买' : '卖',
             itemStyle: { color: fill.side === 'buy' ? '#087d74' : '#c6534a' },

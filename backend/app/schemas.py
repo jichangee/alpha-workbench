@@ -2,12 +2,13 @@ from datetime import date
 from math import isfinite
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 StrategyKey = Literal["buy_hold", "sma_cross", "rsi_reversal", "donchian"]
 ParameterType = Literal["integer", "number"]
 MarketDataSource = Literal["yahoo", "csv"]
+PositionMode = Literal["cash", "rotate"]
 
 
 class StrategyConfig(BaseModel):
@@ -83,10 +84,18 @@ class BacktestRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
 
     datasetId: str
+    positionMode: PositionMode = "cash"
+    alternateDatasetId: str | None = None
     strategy: StrategyConfig
     initialCash: float = 100000
     commission: float = 0
     slippageBps: float = 5
+
+    @model_validator(mode="after")
+    def rotation_requires_an_alternate_dataset(self) -> "BacktestRequest":
+        if self.positionMode == "rotate" and not self.alternateDatasetId:
+            raise ValueError("换仓模式必须提供替代股票数据集")
+        return self
 
     @field_validator("initialCash")
     @classmethod
@@ -115,7 +124,10 @@ class BacktestMetadata(BaseModel):
     strategy_key: StrategyKey = Field(serialization_alias="strategyKey")
     start: date
     end: date
-    execution: Literal["next_open"]
+    execution: Literal["first_open_then_next_open"]
+    position_mode: PositionMode = Field(serialization_alias="positionMode")
+    primary_symbol: str = Field(serialization_alias="primarySymbol")
+    alternate_symbol: str | None = Field(serialization_alias="alternateSymbol")
     warmup: int
     initial_cash: float = Field(serialization_alias="initialCash")
     commission: float
@@ -149,10 +161,12 @@ class BacktestSeries(BaseModel):
     benchmark_drawdown: list[float | None] = Field(
         serialization_alias="benchmarkDrawdown"
     )
+    position_symbol: list[str | None] = Field(serialization_alias="positionSymbol")
 
 
 class BacktestFill(BaseModel):
     date: date
+    symbol: str
     side: Literal["buy", "sell"]
     price: float
     shares: int
@@ -161,6 +175,7 @@ class BacktestFill(BaseModel):
 
 
 class BacktestTrade(BaseModel):
+    symbol: str
     entry_date: date = Field(serialization_alias="entryDate")
     entry_price: float = Field(serialization_alias="entryPrice")
     shares: int
