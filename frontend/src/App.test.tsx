@@ -29,6 +29,6 @@ describe('App result integration', () => {
 
     await user.click(await screen.findByRole('button', { name: '交付回测结果' }))
 
-    expect(await screen.findByRole('region', { name: '回测结果' })).toHaveTextContent('buy_hold 回测结果')
+    expect(await screen.findByRole('region', { name: '回测结果' })).toHaveTextContent('买入并持有 回测结果')
   })
 })

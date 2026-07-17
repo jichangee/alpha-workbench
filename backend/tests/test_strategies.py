@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from app.schemas import StrategyConfig
-from app.strategies import StrategyError, generate_signals
+from app.strategies import InsufficientHistoryError, StrategyError, generate_signals
 
 
 def bars_from_closes(closes: list[float]) -> pd.DataFrame:
@@ -22,6 +22,14 @@ def test_buy_and_hold_targets_full_position_from_the_first_bar():
     assert output.target.dtype == "int64"
     assert output.indicators == {}
     assert output.warmup == 0
+
+
+def test_buy_and_hold_requires_a_next_session_for_open_execution():
+    with pytest.raises(
+        InsufficientHistoryError,
+        match="买入并持有策略至少需要 2 个交易日，才能在次日开盘买入",
+    ):
+        generate_signals(bars_from_closes([10]), StrategyConfig(key="buy_hold"))
 
 
 def test_sma_cross_changes_target_only_after_a_completed_cross():
@@ -106,7 +114,11 @@ def test_donchian_rejects_a_nonpositive_window():
 @pytest.mark.parametrize(
     ("config", "closes", "message"),
     [
-        (StrategyConfig(key="buy_hold"), [], "买入并持有策略至少需要 1 个交易日"),
+        (
+            StrategyConfig(key="buy_hold"),
+            [],
+            "买入并持有策略至少需要 2 个交易日，才能在次日开盘买入",
+        ),
         (
             StrategyConfig(key="sma_cross", params={"short_window": 2, "long_window": 3}),
             [10, 11],

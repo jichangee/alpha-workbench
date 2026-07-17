@@ -38,7 +38,22 @@ describe('ResultsDashboard', () => {
 
     expect(screen.getByRole('button', { name: '价格与信号' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '绩效走势' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByRole('button', { name: '风险回撤' })).not.toBeInTheDocument()
     expect(await screen.findByRole('img', { name: '价格、技术指标及交易成交标记' })).toBeVisible()
+    expect(await screen.findByRole('img', { name: '策略及基准回撤走势' })).toBeVisible()
+  })
+
+  it('shows Chinese strategy and indicator labels instead of wire keys', async () => {
+    const user = userEvent.setup()
+    render(<ResultsDashboard result={{
+      ...openPositionFixture,
+      indicators: { short_sma: [100, 101], long_sma: [99, 100] },
+    }} />)
+
+    expect(screen.getByRole('heading', { name: '均线交叉 回测结果' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '价格与信号' }))
+    expect(await screen.findByText('短期均线')).toBeVisible()
+    expect(screen.getByText('长期均线')).toBeVisible()
   })
 
   it('keeps open positions beside closed trades and exposes all P&L columns', () => {

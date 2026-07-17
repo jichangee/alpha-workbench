@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api'
 import { BacktestForm } from './BacktestForm'
 import type { BacktestResponse } from '../types'
@@ -54,6 +54,17 @@ function deferred<T>() {
 
 describe('BacktestForm', () => {
   beforeEach(() => vi.clearAllMocks())
+  afterEach(() => vi.useRealTimers())
+
+  it('defaults to the five complete calendar years using local dates', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 0, 1, 0, 30))
+
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+
+    expect(screen.getByLabelText('开始日期')).toHaveValue('2021-01-01')
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2025-12-31')
+  })
   it('shows only the selected strategy parameters', async () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)

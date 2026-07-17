@@ -1,21 +1,33 @@
 import { useEffect, useRef } from 'react'
 import { CandlestickChart, LineChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import { DataZoomComponent, GridComponent, LegendComponent, MarkPointComponent, TooltipComponent } from 'echarts/components'
 import { init, use } from 'echarts/core'
 import { SVGRenderer } from 'echarts/renderers'
+import { indicatorLabel } from '../displayLabels'
 import type { BacktestResponse } from '../types'
 
-use([CandlestickChart, LineChart, GridComponent, LegendComponent, TooltipComponent, SVGRenderer])
+use([
+  CandlestickChart,
+  LineChart,
+  DataZoomComponent,
+  GridComponent,
+  LegendComponent,
+  MarkPointComponent,
+  TooltipComponent,
+  SVGRenderer,
+])
 
 interface PriceChartProps {
   result: BacktestResponse
 }
 
 export function buildPriceOption(result: BacktestResponse) {
-  const indicatorSeries = Object.entries(result.indicators).map(([name, values]) => ({
-    name,
+  const hasRsi = Object.hasOwn(result.indicators, 'rsi')
+  const indicatorSeries = Object.entries(result.indicators).map(([key, values]) => ({
+    name: indicatorLabel(key),
     type: 'line' as const,
     data: values,
+    yAxisIndex: key === 'rsi' ? 1 : 0,
     showSymbol: false,
     smooth: true,
     lineStyle: { width: 1.5 },
@@ -24,10 +36,14 @@ export function buildPriceOption(result: BacktestResponse) {
     animation: false,
     color: ['#3877a8', '#c78a28', '#805ad5', '#b55b4a'],
     grid: { left: 54, right: 20, top: 44, bottom: 34 },
-    legend: { top: 8, type: 'scroll', data: ['价格', ...Object.keys(result.indicators)] },
+    legend: { top: 8, type: 'scroll', data: ['价格', ...Object.keys(result.indicators).map(indicatorLabel)] },
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: result.series.dates, axisLabel: { hideOverlap: true } },
-    yAxis: { type: 'value', scale: true },
+    yAxis: [
+      { type: 'value', scale: true },
+      ...(hasRsi ? [{ type: 'value' as const, min: 0, max: 100, position: 'right' as const }] : []),
+    ],
+    dataZoom: [{ type: 'inside' as const, xAxisIndex: 0 }],
     series: [
       {
         name: '价格',
@@ -67,5 +83,11 @@ export function PriceChart({ result }: PriceChartProps) {
     }
   }, [result])
 
-  return <div className="chart-canvas" ref={container} role="img" aria-label="价格、技术指标及交易成交标记" />
+  const labels = Object.keys(result.indicators).map(indicatorLabel)
+  return (
+    <div>
+      {labels.length > 0 && <p className="chart-legend indicator-legend" aria-hidden="true">{labels.map((label) => <span key={label}>{label}</span>)}</p>}
+      <div className="chart-canvas" ref={container} role="img" aria-label="价格、技术指标及交易成交标记" />
+    </div>
+  )
 }

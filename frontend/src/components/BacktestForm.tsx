@@ -8,20 +8,22 @@ interface BacktestFormProps {
   onStateChange?: (state: RunState) => void
 }
 
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
+function localDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 function initialForm(strategies: readonly StrategyDefinition[]): FormState {
   const now = new Date()
-  const fiveYearsAgo = new Date(now)
-  fiveYearsAgo.setFullYear(now.getFullYear() - 5)
+  const lastCompleteYear = now.getFullYear() - 1
+  const firstCompleteYear = lastCompleteYear - 4
   const strategy = strategies[0]
   return {
     source: 'yahoo',
     symbol: 'SPY',
-    start: isoDate(fiveYearsAgo),
-    end: isoDate(now),
+    start: localDate(new Date(firstCompleteYear, 0, 1)),
+    end: localDate(new Date(lastCompleteYear, 11, 31)),
     file: null,
     strategyKey: strategy?.key ?? '',
     params: Object.fromEntries(strategy?.parameters.map((parameter) => [parameter.key, parameter.default]) ?? []),
@@ -173,7 +175,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
             </label>
             <label>
               结束日期
-              <input aria-label="结束日期" type="date" value={form.end} min={form.start || undefined} max={isoDate(new Date())} onChange={(event) => setForm((current) => ({ ...current, end: event.target.value }))} />
+              <input aria-label="结束日期" type="date" value={form.end} min={form.start || undefined} max={localDate(new Date())} onChange={(event) => setForm((current) => ({ ...current, end: event.target.value }))} />
             </label>
           </div>
         ) : (

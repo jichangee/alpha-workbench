@@ -30,6 +30,7 @@ from .schemas import (
 
 app = FastAPI(title="美股回测 API")
 dataset_store = DatasetStore()
+MAX_CSV_BYTES = 10 * 1024 * 1024
 
 
 @app.exception_handler(RequestValidationError)
@@ -76,7 +77,7 @@ def backtest(request: BacktestRequest) -> BacktestResponse | JSONResponse:
 
 
 @app.post("/api/market-data/preview", response_model=MarketDataPreview)
-async def preview_market_data(
+def preview_market_data(
     source: MarketDataSource = Form(...),
     file: UploadFile | None = File(default=None),
     symbol: str | None = Form(default=None),
@@ -86,8 +87,11 @@ async def preview_market_data(
     if source == "csv":
         if file is None:
             return _validation_error({"file": "请上传 CSV 文件"})
+        csv_bytes = file.file.read(MAX_CSV_BYTES + 1)
+        if len(csv_bytes) > MAX_CSV_BYTES:
+            return _validation_error({"file": "CSV 文件不能超过 10 MiB"})
         try:
-            bars = normalize_bars(pd.read_csv(BytesIO(await file.read())))
+            bars = normalize_bars(pd.read_csv(BytesIO(csv_bytes)))
         except pd.errors.EmptyDataError:
             return _validation_error({"file": "CSV 文件不能为空"})
         except (pd.errors.ParserError, UnicodeDecodeError):
@@ -106,6 +110,8 @@ async def preview_market_data(
             return _validation_error({"start": "请输入开始和结束日期"})
         if start > end:
             return _validation_error({"end": "结束日期不能早于开始日期"})
+        if end > date.today():
+            return _validation_error({"end": "结束日期不能晚于今天"})
         try:
             bars = load_yahoo(symbol, start, end)
         except MarketDataError as error:

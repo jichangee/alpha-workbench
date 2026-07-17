@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, timedelta
+import inspect
 from pathlib import Path
 
 import pandas as pd
@@ -70,7 +71,15 @@ def test_load_yahoo_normalizes_one_symbol_multiindex_and_uses_disk_cache(
     monkeypatch, tmp_path
 ):
     calls = []
-    raw = valid_frame()
+    raw = pd.concat(
+        [
+            valid_frame(),
+            pd.DataFrame(
+                {"Open": [104], "High": [106], "Low": [103], "Close": [105]},
+                index=pd.to_datetime(["2024-01-04"]),
+            ),
+        ]
+    )
     raw.columns = pd.MultiIndex.from_product([raw.columns, ["SPY"]])
 
     def fake_download(symbol, *, start, end, interval, auto_adjust, progress):
@@ -85,7 +94,22 @@ def test_load_yahoo_normalizes_one_symbol_multiindex_and_uses_disk_cache(
 
     assert list(first.columns[:4]) == ["Open", "High", "Low", "Close"]
     assert first.equals(second)
-    assert calls == [("SPY", date(2024, 1, 2), date(2024, 1, 4), "1d", True, False)]
+    assert first.index[-1].date() == date(2024, 1, 4)
+    assert calls == [
+        (
+            "SPY",
+            date(2024, 1, 2),
+            date(2024, 1, 4) + timedelta(days=1),
+            "1d",
+            True,
+            False,
+        )
+    ]
+    assert (tmp_path / "SPY_2024-01-02_2024-01-04.pkl").exists()
+
+
+def test_preview_route_is_synchronous_so_blocking_parsing_runs_in_threadpool():
+    assert not inspect.iscoroutinefunction(main.preview_market_data)
 
 
 def test_preview_accepts_csv_and_returns_dataset_summary():
@@ -107,6 +131,23 @@ def test_preview_accepts_csv_and_returns_dataset_summary():
     assert len(body["preview"]) == 4
     assert body["warnings"] == []
     assert body["datasetId"]
+
+
+def test_preview_rejects_csv_larger_than_ten_mebibytes():
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/market-data/preview",
+        data={"source": "csv"},
+        files={"file": ("large.csv", b"x" * (10 * 1024 * 1024 + 1), "text/csv")},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "code": "VALIDATION_ERROR",
+        "message": "请求参数无效",
+        "fields": {"file": "CSV 文件不能超过 10 MiB"},
+    }
 
 
 def test_preview_maps_yahoo_download_failure_to_market_data_error(monkeypatch):
@@ -224,6 +265,27 @@ def test_preview_rejects_blank_yahoo_symbol_before_loading(monkeypatch):
 
     assert response.status_code == 422
     assert response.json()["fields"] == {"symbol": "请输入股票代码"}
+
+
+def test_preview_rejects_future_yahoo_end_date_before_loading(monkeypatch):
+    def should_not_load(*_args, **_kwargs):
+        raise AssertionError("Yahoo loader should not be called")
+
+    monkeypatch.setattr(main, "load_yahoo", should_not_load)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/market-data/preview",
+        data={
+            "source": "yahoo",
+            "symbol": "SPY",
+            "start": "2999-01-01",
+            "end": "2999-01-02",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["fields"] == {"end": "结束日期不能晚于今天"}
 
 
 def test_preview_maps_malformed_csv_to_chinese_actionable_error():

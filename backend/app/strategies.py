@@ -66,7 +66,10 @@ def _wilder_average(values: pd.Series, period: int) -> pd.Series:
 
 
 def buy_hold(bars: pd.DataFrame, _params: dict[str, float | int]) -> StrategyOutput:
-    _require_history(bars, "买入并持有", 1)
+    if len(bars) < 2:
+        raise InsufficientHistoryError(
+            "买入并持有策略至少需要 2 个交易日，才能在次日开盘买入"
+        )
     target = pd.Series(1, index=bars.index, dtype="int64")
     return StrategyOutput(target=target, indicators={}, warmup=0)
 

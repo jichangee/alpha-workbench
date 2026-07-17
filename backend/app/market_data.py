@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import re
 
@@ -72,7 +72,7 @@ def load_yahoo(symbol: str, start: date, end: date) -> pd.DataFrame:
         frame = yf.download(
             normalized_symbol,
             start=start,
-            end=end,
+            end=end + timedelta(days=1),
             interval="1d",
             auto_adjust=True,
             progress=False,

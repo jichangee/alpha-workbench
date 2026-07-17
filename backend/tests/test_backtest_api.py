@@ -116,6 +116,35 @@ def test_backtest_applies_documented_financial_defaults(client, dataset_id):
     }
 
 
+def test_buy_hold_with_one_bar_returns_backtest_error_instead_of_empty_success(client):
+    only_date = pd.Timestamp("2024-01-02")
+    bars = pd.DataFrame(
+        {"Open": [100.0], "High": [101.0], "Low": [99.0], "Close": [100.0]},
+        index=pd.DatetimeIndex([only_date]),
+    )
+    dataset_id = main.dataset_store.put(
+        bars,
+        DatasetMetadata(
+            symbol="SPY",
+            source="csv",
+            start=only_date.date(),
+            end=only_date.date(),
+        ),
+    )
+
+    response = client.post(
+        "/api/backtests",
+        json={"datasetId": dataset_id, "strategy": {"key": "buy_hold"}},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "code": "BACKTEST_ERROR",
+        "message": "买入并持有策略至少需要 2 个交易日，才能在次日开盘买入",
+        "fields": {},
+    }
+
+
 def test_backtest_applies_sma_defaults_from_strategy_metadata(client, long_dataset_id):
     response = client.post(
         "/api/backtests",
