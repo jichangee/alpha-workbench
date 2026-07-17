@@ -1,10 +1,12 @@
 from datetime import date
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .backtests import (
     BacktestError,
@@ -16,8 +18,8 @@ from .catalog import STRATEGIES
 from .datasets import DatasetStore
 from .market_data import MarketDataError, load_yahoo, normalize_bars
 from .schemas import (
-    DatasetMetadata,
     BacktestRequest,
+    DatasetMetadata,
     BacktestResponse,
     MarketDataBarPreview,
     MarketDataPreview,
@@ -149,3 +151,8 @@ def _validation_error(fields: dict[str, str]) -> JSONResponse:
         status_code=422,
         content={"code": "VALIDATION_ERROR", "message": "请求参数无效", "fields": fields},
     )
+
+
+frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if frontend_dist.is_dir():
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
