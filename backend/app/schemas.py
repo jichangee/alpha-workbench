@@ -196,3 +196,74 @@ class BacktestResponse(BaseModel):
     fills: list[BacktestFill] = Field(default_factory=list)
     trades: list[BacktestTrade] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class PortfolioPosition(BaseModel):
+    """One symbol and its fraction of a portfolio's initial value."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, allow_inf_nan=False)
+
+    symbol: str = Field(min_length=1, max_length=15)
+    weight: float = Field(gt=0)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_symbol(cls, value: str) -> str:
+        return value.upper()
+
+
+class PortfolioDefinition(BaseModel):
+    """An initial allocation that will be held without rebalancing."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=40)
+    positions: list[PortfolioPosition] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_positions(self) -> "PortfolioDefinition":
+        symbols = [position.symbol for position in self.positions]
+        if len(symbols) != len(set(symbols)):
+            raise ValueError("同一持仓不能重复添加股票")
+        if abs(sum(position.weight for position in self.positions) - 1) > 1e-6:
+            raise ValueError("每组持仓权重合计必须为 100%")
+        return self
+
+
+class PortfolioComparisonRequest(BaseModel):
+    """Two portfolios and the requested Yahoo history range."""
+
+    start: date
+    end: date
+    portfolios: list[PortfolioDefinition] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "PortfolioComparisonRequest":
+        if self.start > self.end:
+            raise ValueError("结束日期不能早于开始日期")
+        if self.end > date.today():
+            raise ValueError("结束日期不能晚于今天")
+        return self
+
+
+class PortfolioComparisonMetrics(BaseModel):
+    total_return: float | None = Field(serialization_alias="totalReturn")
+    cagr: float | None
+    annualized_volatility: float | None = Field(
+        serialization_alias="annualizedVolatility"
+    )
+    max_drawdown: float | None = Field(serialization_alias="maxDrawdown")
+
+
+class PortfolioComparisonSeries(BaseModel):
+    name: str
+    positions: list[PortfolioPosition]
+    equity: list[float]
+    metrics: PortfolioComparisonMetrics
+
+
+class PortfolioComparisonResponse(BaseModel):
+    start: date
+    end: date
+    dates: list[date]
+    portfolios: list[PortfolioComparisonSeries]
