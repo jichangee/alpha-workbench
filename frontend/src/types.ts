@@ -140,6 +140,41 @@ export interface BacktestResponse {
   warnings: string[]
 }
 
+export interface PortfolioPositionInput {
+  symbol: string
+  weight: number
+}
+
+export interface PortfolioDefinitionInput {
+  name: string
+  positions: PortfolioPositionInput[]
+}
+
+export interface PortfolioComparisonInput {
+  start: string
+  end: string
+  portfolios: [PortfolioDefinitionInput, PortfolioDefinitionInput]
+}
+
+export interface PortfolioComparisonMetrics {
+  totalReturn: number | null
+  cagr: number | null
+  annualizedVolatility: number | null
+  maxDrawdown: number | null
+}
+
+export interface PortfolioComparisonSeries extends PortfolioDefinitionInput {
+  equity: number[]
+  metrics: PortfolioComparisonMetrics
+}
+
+export interface PortfolioComparisonResponse {
+  start: string
+  end: string
+  dates: string[]
+  portfolios: [PortfolioComparisonSeries, PortfolioComparisonSeries]
+}
+
 export interface ApiProblem {
   code: string
   message: string

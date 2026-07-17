@@ -3,6 +3,8 @@ import type {
   BacktestResponse,
   FormState,
   MarketDataPreview,
+  PortfolioComparisonInput,
+  PortfolioComparisonResponse,
   StrategyDefinition,
 } from './types'
 
@@ -114,4 +116,16 @@ export async function runBacktest(
     file: null,
   }, signal)
   return runBacktestForDataset(input, preview.datasetId, alternatePreview.datasetId, signal)
+}
+
+export async function comparePortfolios(
+  input: PortfolioComparisonInput,
+  signal?: AbortSignal,
+): Promise<PortfolioComparisonResponse> {
+  return request<PortfolioComparisonResponse>('/api/portfolio-comparisons', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    signal,
+  })
 }
