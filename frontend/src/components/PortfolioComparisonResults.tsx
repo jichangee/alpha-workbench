@@ -1,6 +1,10 @@
+import { lazy, Suspense } from 'react'
 import type { PortfolioComparisonMetrics, PortfolioComparisonResponse } from '../types'
 import { formatPercent } from '../formatters'
-import { PortfolioComparisonChart } from './PortfolioComparisonChart'
+
+const PortfolioComparisonChart = lazy(() => import('./PortfolioComparisonChart').then(
+  ({ PortfolioComparisonChart: component }) => ({ default: component }),
+))
 
 interface PortfolioComparisonResultsProps {
   result: PortfolioComparisonResponse
@@ -50,7 +54,9 @@ export function PortfolioComparisonResults({ result }: PortfolioComparisonResult
             <p>两组起点均为 100，之后权重随价格自然漂移。</p>
           </div>
         </div>
-        <PortfolioComparisonChart result={result} />
+        <Suspense fallback={<p className="chart-loading" role="status">正在加载走势图…</p>}>
+          <PortfolioComparisonChart result={result} />
+        </Suspense>
       </section>
 
       <section className="portfolio-metrics-card" aria-labelledby="portfolio-metrics-heading">

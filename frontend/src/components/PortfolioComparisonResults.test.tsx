@@ -10,6 +10,12 @@ vi.mock('echarts/core', () => ({
 }))
 
 describe('PortfolioComparisonResults', () => {
+  it('defers the chart bundle behind a loading boundary', () => {
+    render(<PortfolioComparisonResults result={comparisonResultFixture} />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载走势图…')
+  })
+
   it('renders both portfolios, compositions, dates, and comparison metrics', () => {
     render(<PortfolioComparisonResults result={comparisonResultFixture} />)
 

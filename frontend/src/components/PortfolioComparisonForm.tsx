@@ -3,7 +3,7 @@ import type { PortfolioComparisonInput, PortfolioDefinitionInput } from '../type
 
 interface PortfolioComparisonFormProps {
   onCompare: (input: PortfolioComparisonInput) => void
-  disabled: boolean
+  running: boolean
 }
 
 interface PositionDraft {
@@ -81,7 +81,7 @@ function validate(
   }
 }
 
-export function PortfolioComparisonForm({ onCompare, disabled }: PortfolioComparisonFormProps) {
+export function PortfolioComparisonForm({ onCompare, running }: PortfolioComparisonFormProps) {
   const [{ start: initialStart, end: initialEnd }] = useState(initialDates)
   const [start, setStart] = useState(initialStart)
   const [end, setEnd] = useState(initialEnd)
@@ -243,7 +243,7 @@ export function PortfolioComparisonForm({ onCompare, disabled }: PortfolioCompar
 
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="primary-action" type="submit">
-        {disabled ? '重新对比' : '开始对比'}
+        {running ? '重新对比' : '开始对比'}
       </button>
     </form>
   )

@@ -31,4 +31,20 @@ describe('App result integration', () => {
 
     expect(await screen.findByRole('region', { name: '回测结果' })).toHaveTextContent('买入并持有 回测结果')
   })
+
+  it('switches between backtest and portfolio comparison workspaces', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: '交付回测结果' })).toBeVisible()
+    await user.click(screen.getByRole('tab', { name: '持仓对比' }))
+
+    expect(screen.getByRole('button', { name: '开始对比' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '交付回测结果' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '持仓对比' })).toHaveAttribute('aria-selected', 'true')
+
+    await user.click(screen.getByRole('tab', { name: '策略回测' }))
+    expect(screen.getByRole('button', { name: '交付回测结果' })).toBeVisible()
+    expect(screen.getByRole('tab', { name: '策略回测' })).toHaveAttribute('aria-selected', 'true')
+  })
 })

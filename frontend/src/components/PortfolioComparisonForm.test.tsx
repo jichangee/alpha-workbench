@@ -11,7 +11,7 @@ describe('PortfolioComparisonForm', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 6, 17, 12))
 
-    render(<PortfolioComparisonForm onCompare={vi.fn()} disabled={false} />)
+    render(<PortfolioComparisonForm onCompare={vi.fn()} running={false} />)
 
     expect(screen.getByLabelText('持仓 1 第 1 只股票代码')).toHaveValue('VOO')
     expect(screen.getByLabelText('持仓 1 第 1 只股票权重')).toHaveValue(50)
@@ -26,7 +26,7 @@ describe('PortfolioComparisonForm', () => {
 
   it('adds and removes stock rows while keeping at least one row', async () => {
     const user = userEvent.setup()
-    render(<PortfolioComparisonForm onCompare={vi.fn()} disabled={false} />)
+    render(<PortfolioComparisonForm onCompare={vi.fn()} running={false} />)
 
     await user.click(screen.getByRole('button', { name: '为持仓 2 添加股票' }))
     expect(screen.getByLabelText('持仓 2 第 2 只股票代码')).toBeInTheDocument()
@@ -38,7 +38,7 @@ describe('PortfolioComparisonForm', () => {
   it('blocks comparison until each portfolio totals 100%', async () => {
     const user = userEvent.setup()
     const onCompare = vi.fn()
-    render(<PortfolioComparisonForm onCompare={onCompare} disabled={false} />)
+    render(<PortfolioComparisonForm onCompare={onCompare} running={false} />)
 
     await user.clear(screen.getByLabelText('持仓 1 第 1 只股票权重'))
     await user.type(screen.getByLabelText('持仓 1 第 1 只股票权重'), '40')
@@ -52,7 +52,7 @@ describe('PortfolioComparisonForm', () => {
   it('normalizes symbols and converts percentages to decimal weights', async () => {
     const user = userEvent.setup()
     const onCompare = vi.fn()
-    render(<PortfolioComparisonForm onCompare={onCompare} disabled={false} />)
+    render(<PortfolioComparisonForm onCompare={onCompare} running={false} />)
 
     const symbol = screen.getByLabelText('持仓 1 第 1 只股票代码')
     await user.clear(symbol)
@@ -70,7 +70,7 @@ describe('PortfolioComparisonForm', () => {
   it('rejects duplicate symbols in one portfolio', async () => {
     const user = userEvent.setup()
     const onCompare = vi.fn()
-    render(<PortfolioComparisonForm onCompare={onCompare} disabled={false} />)
+    render(<PortfolioComparisonForm onCompare={onCompare} running={false} />)
 
     const symbol = screen.getByLabelText('持仓 1 第 2 只股票代码')
     await user.clear(symbol)

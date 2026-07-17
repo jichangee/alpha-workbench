@@ -55,7 +55,7 @@ export function PortfolioComparisonWorkspace() {
   return (
     <section className="portfolio-workspace" aria-label="持仓对比工作区">
       <aside className="configuration-panel portfolio-configuration">
-        <PortfolioComparisonForm onCompare={compare} disabled={state === 'running'} />
+        <PortfolioComparisonForm onCompare={compare} running={state === 'running'} />
         {error && <p className="form-error comparison-api-error" role="alert">{error}</p>}
       </aside>
 
