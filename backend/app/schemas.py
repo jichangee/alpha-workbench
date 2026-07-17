@@ -84,9 +84,9 @@ class BacktestRequest(BaseModel):
 
     datasetId: str
     strategy: StrategyConfig
-    initialCash: float
-    commission: float
-    slippageBps: float
+    initialCash: float = 100000
+    commission: float = 0
+    slippageBps: float = 5
 
     @field_validator("initialCash")
     @classmethod

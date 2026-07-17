@@ -7,8 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
+from app import backtests
 from app.datasets import DatasetStore
+from app.schemas import DatasetMetadata
 from app.serialization import json_safe
+from app.strategies import InsufficientHistoryError, StrategyError
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "prices.csv"
@@ -31,6 +34,27 @@ def dataset_id(client):
 
     assert response.status_code == 200
     return response.json()["datasetId"]
+
+
+@pytest.fixture
+def long_dataset_id(client):
+    dates = pd.bdate_range("2024-01-02", periods=60)
+    closes = pd.Series(range(100, 160), index=dates, dtype="float64")
+    bars = pd.DataFrame(
+        {
+            "Open": closes,
+            "High": closes + 1,
+            "Low": closes - 1,
+            "Close": closes,
+        },
+        index=dates,
+    )
+    return main.dataset_store.put(
+        bars,
+        DatasetMetadata(
+            symbol="SPY", source="csv", start=dates[0].date(), end=dates[-1].date()
+        ),
+    )
 
 
 def test_backtest_returns_json_safe_metrics_series_and_trades(client, dataset_id):
@@ -70,6 +94,71 @@ def test_backtest_returns_json_safe_metrics_series_and_trades(client, dataset_id
     assert body["indicators"]["short_sma"][0] is None
     assert "maxDrawdown" in body["metrics"]
     json.dumps(body, allow_nan=False)
+
+
+def test_backtest_applies_documented_financial_defaults(client, dataset_id):
+    response = client.post(
+        "/api/backtests",
+        json={"datasetId": dataset_id, "strategy": {"key": "buy_hold"}},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["metadata"] == {
+        "datasetId": dataset_id,
+        "strategyKey": "buy_hold",
+        "start": "2024-01-02",
+        "end": "2024-01-05",
+        "execution": "next_open",
+        "warmup": 0,
+        "initialCash": 100000.0,
+        "commission": 0.0,
+        "slippageBps": 5.0,
+    }
+
+
+def test_backtest_applies_sma_defaults_from_strategy_metadata(client, long_dataset_id):
+    response = client.post(
+        "/api/backtests",
+        json={"datasetId": long_dataset_id, "strategy": {"key": "sma_cross"}},
+    )
+
+    assert response.status_code == 200
+    indicators = response.json()["indicators"]
+    assert indicators["short_sma"][19] == 109.5
+    assert indicators["long_sma"][49] == 124.5
+
+
+def test_backtest_preserves_explicit_strategy_parameters(client, dataset_id):
+    response = client.post(
+        "/api/backtests",
+        json={
+            "datasetId": dataset_id,
+            "strategy": {
+                "key": "sma_cross",
+                "params": {"short_window": 2, "long_window": 3},
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["indicators"]["short_sma"][1] == 102.0
+
+
+def test_backtest_rejects_unknown_strategy_parameters(client, dataset_id):
+    response = client.post(
+        "/api/backtests",
+        json={
+            "datasetId": dataset_id,
+            "strategy": {"key": "buy_hold", "params": {"not_a_setting": 1}},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "code": "VALIDATION_ERROR",
+        "message": "请求参数无效",
+        "fields": {"strategy.params.not_a_setting": "输入不合法"},
+    }
 
 
 def test_backtest_serializes_fill_and_open_trade_dates(client, dataset_id):
@@ -176,6 +265,48 @@ def test_backtest_maps_insufficient_history_to_a_chinese_execution_error(
     assert response.json() == {
         "code": "BACKTEST_ERROR",
         "message": "均线交叉策略至少需要 5 个交易日",
+        "fields": {},
+    }
+
+
+def test_backtest_routes_only_typed_insufficient_history_errors_to_400(
+    client, dataset_id, monkeypatch
+):
+    def fail_with_ordinary_strategy_error(*_args, **_kwargs):
+        raise StrategyError("设置文本中恰好包含至少需要，但它不是数据不足错误")
+
+    monkeypatch.setattr(backtests, "generate_signals", fail_with_ordinary_strategy_error)
+
+    response = client.post(
+        "/api/backtests",
+        json={"datasetId": dataset_id, "strategy": {"key": "buy_hold"}},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["fields"] == {
+        "strategy": "设置文本中恰好包含至少需要，但它不是数据不足错误"
+    }
+
+
+def test_backtest_routes_typed_insufficient_history_errors_to_400(
+    client, dataset_id, monkeypatch
+):
+    def fail_with_insufficient_history(*_args, **_kwargs):
+        raise InsufficientHistoryError("历史数据太短")
+
+    monkeypatch.setattr(
+        backtests, "generate_signals", fail_with_insufficient_history
+    )
+
+    response = client.post(
+        "/api/backtests",
+        json={"datasetId": dataset_id, "strategy": {"key": "buy_hold"}},
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "code": "BACKTEST_ERROR",
+        "message": "历史数据太短",
         "fields": {},
     }
 

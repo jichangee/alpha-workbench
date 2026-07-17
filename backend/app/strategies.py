@@ -12,6 +12,10 @@ class StrategyError(ValueError):
     """A strategy configuration error that is safe to show to a user."""
 
 
+class InsufficientHistoryError(StrategyError):
+    """The dataset cannot produce a strategy signal with the requested history."""
+
+
 @dataclass(frozen=True)
 class StrategyOutput:
     target: pd.Series
@@ -45,7 +49,7 @@ def _within(value: int, label: str, minimum: int, maximum: int) -> None:
 
 def _require_history(bars: pd.DataFrame, strategy: str, minimum_bars: int) -> None:
     if len(bars) < minimum_bars:
-        raise StrategyError(f"{strategy}策略至少需要 {minimum_bars} 个交易日")
+        raise InsufficientHistoryError(f"{strategy}策略至少需要 {minimum_bars} 个交易日")
 
 
 def _wilder_average(values: pd.Series, period: int) -> pd.Series:
