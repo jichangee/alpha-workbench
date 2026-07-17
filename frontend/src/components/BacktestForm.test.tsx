@@ -1,7 +1,16 @@
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api'
 import { BacktestForm } from './BacktestForm'
+import type { BacktestResponse } from '../types'
+
+const runBacktestMock = vi.hoisted(() => vi.fn())
+
+vi.mock('../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api')>()
+  return { ...actual, runBacktest: runBacktestMock }
+})
 
 const catalogFixture = [
   {
@@ -30,7 +39,21 @@ const catalogFixture = [
   },
 ] as const
 
+const successfulResult: BacktestResponse = {
+  metadata: { datasetId: 'newer', strategyKey: 'buy_hold', start: '2021-01-01', end: '2021-12-31', execution: 'next_open', warmup: 0, initialCash: 100000, commission: 0, slippageBps: 5 },
+  metrics: { endingEquity: 100000, totalReturn: 0, cagr: null, annualizedVolatility: null, sharpeRatio: null, maxDrawdown: 0, tradeCount: 0, winRate: null },
+  series: { dates: [], open: [], high: [], low: [], close: [], cash: [], shares: [], holdings: [], equity: [], strategy: [], benchmark: [], drawdown: [], benchmarkDrawdown: [] },
+  indicators: {}, fills: [], trades: [], warnings: [],
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((complete) => { resolve = complete })
+  return { promise, resolve }
+}
+
 describe('BacktestForm', () => {
+  beforeEach(() => vi.clearAllMocks())
   it('shows only the selected strategy parameters', async () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
@@ -64,5 +87,59 @@ describe('BacktestForm', () => {
 
     expect(screen.getByLabelText('CSV 文件')).toBeVisible()
     expect(screen.queryByLabelText('开始日期')).not.toBeInTheDocument()
+  })
+
+  it('shows a disabled running state while the submitted workflow is pending', async () => {
+    const user = userEvent.setup()
+    const pending = deferred<BacktestResponse>()
+    const onRun = vi.fn()
+    const onStateChange = vi.fn()
+    runBacktestMock.mockReturnValue(pending.promise)
+    render(<BacktestForm strategies={catalogFixture} onRun={onRun} onStateChange={onStateChange} />)
+
+    await user.click(screen.getByRole('button', { name: '运行回测' }))
+
+    expect(screen.getByRole('button', { name: '正在运行回测…' })).toBeDisabled()
+    expect(onStateChange).toHaveBeenCalledWith('running')
+    await act(async () => pending.resolve(successfulResult))
+    await waitFor(() => expect(onRun).toHaveBeenCalledWith(successfulResult))
+  })
+
+  it('keeps entered values and shows a Chinese API message after an API error', async () => {
+    const user = userEvent.setup()
+    runBacktestMock.mockRejectedValue(new ApiError({ code: 'MARKET_DATA_ERROR', message: '行情数据不可用，请改用 CSV。', fields: {} }))
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+
+    await user.clear(screen.getByLabelText('股票代码'))
+    await user.type(screen.getByLabelText('股票代码'), 'MSFT')
+    await user.selectOptions(screen.getByLabelText('策略'), 'sma_cross')
+    await user.clear(screen.getByLabelText('短均线周期'))
+    await user.type(screen.getByLabelText('短均线周期'), '10')
+    await user.click(screen.getByRole('button', { name: '运行回测' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('行情数据不可用，请改用 CSV。')
+    expect(screen.getByLabelText('股票代码')).toHaveValue('MSFT')
+    expect(screen.getByLabelText('短均线周期')).toHaveValue(10)
+  })
+
+  it('aborts a previous run and ignores its stale completion when a new run starts', async () => {
+    const user = userEvent.setup()
+    const first = deferred<BacktestResponse>()
+    const second = deferred<BacktestResponse>()
+    const onRun = vi.fn()
+    runBacktestMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    render(<BacktestForm strategies={catalogFixture} onRun={onRun} />)
+
+    await user.click(screen.getByRole('button', { name: '运行回测' }))
+    const form = screen.getByRole('button', { name: '正在运行回测…' }).closest('form')!
+    fireEvent.submit(form)
+
+    const firstSignal = runBacktestMock.mock.calls[0][1] as AbortSignal
+    expect(firstSignal.aborted).toBe(true)
+    await act(async () => first.resolve({ ...successfulResult, metadata: { ...successfulResult.metadata, datasetId: 'stale' } }))
+    expect(onRun).not.toHaveBeenCalled()
+    await act(async () => second.resolve(successfulResult))
+    await waitFor(() => expect(onRun).toHaveBeenCalledTimes(1))
+    expect(onRun).toHaveBeenLastCalledWith(successfulResult)
   })
 })
