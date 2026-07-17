@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ResultsDashboard } from './ResultsDashboard'
 import type { BacktestResponse } from '../types'
@@ -10,7 +11,7 @@ vi.mock('echarts/core', () => ({
 
 const openPositionFixture: BacktestResponse = {
   metadata: { datasetId: 'demo', strategyKey: 'sma_cross', start: '2024-01-02', end: '2024-01-03', execution: 'next_open', warmup: 20, initialCash: 10000, commission: 1, slippageBps: 5 },
-  metrics: { endingEquity: 10100, totalReturn: 0.01, cagr: 0.01, annualizedVolatility: 0.1, sharpeRatio: 0.5, maxDrawdown: -0.02, tradeCount: 1, winRate: null },
+  metrics: { endingEquity: 10100, totalReturn: 0.01, cagr: 0.01, annualizedVolatility: 0.1, sharpeRatio: 0.5, maxDrawdown: -0.02, tradeCount: 0, winRate: null },
   series: {
     dates: ['2024-01-02', '2024-01-03'], open: [100, 101], high: [102, 103], low: [99, 100], close: [101, 102], cash: [0, 0], shares: [100, 100], holdings: [10100, 10200], equity: [10000, 10100], strategy: [1, 1.01], benchmark: [1, 1.02], drawdown: [0, -0.01], benchmarkDrawdown: [0, 0],
   },
@@ -27,5 +28,33 @@ describe('ResultsDashboard', () => {
     expect(await screen.findByText('策略净值')).toBeVisible()
     expect(screen.getByText('买入并持有基准')).toBeVisible()
     expect(screen.getByText('当前持仓尚未平仓')).toBeVisible()
+  })
+
+  it('switches chart views through pressed ordinary buttons', async () => {
+    const user = userEvent.setup()
+    render(<ResultsDashboard result={openPositionFixture} />)
+
+    await user.click(screen.getByRole('button', { name: '价格与信号' }))
+
+    expect(screen.getByRole('button', { name: '价格与信号' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '绩效走势' })).toHaveAttribute('aria-pressed', 'false')
+    expect(await screen.findByRole('img', { name: '价格、技术指标及交易成交标记' })).toBeVisible()
+  })
+
+  it('keeps open positions beside closed trades and exposes all P&L columns', () => {
+    const mixedTrades = [
+      { entryDate: '2024-01-02', entryPrice: 100, shares: 10, exitDate: '2024-01-04', exitPrice: 105, grossPnl: 50, costs: 2.5, netPnl: 47.5, returnPct: 0.0475, isOpen: false },
+      { entryDate: '2024-01-05', entryPrice: 110, shares: 8, exitDate: null, exitPrice: null, grossPnl: null, costs: 1, netPnl: null, returnPct: null, isOpen: true },
+    ]
+    render(<ResultsDashboard result={{ ...openPositionFixture, metrics: { ...openPositionFixture.metrics, tradeCount: 1 }, trades: mixedTrades }} />)
+
+    expect(screen.getAllByRole('row')).toHaveLength(3)
+    expect(screen.getByRole('columnheader', { name: '毛盈亏' })).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: '成本' })).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: '净盈亏' })).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: '收益率' })).toBeVisible()
+    expect(screen.getByText('持仓中')).toBeVisible()
+    expect(screen.getByText('+$50.00')).toBeVisible()
+    expect(screen.getByText('+$47.50')).toBeVisible()
   })
 })

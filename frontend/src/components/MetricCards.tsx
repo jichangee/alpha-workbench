@@ -1,4 +1,4 @@
-import { formatCurrency, formatNumber, formatPercent } from '../formatters'
+import { formatCurrency, formatInteger, formatNumber, formatPercent } from '../formatters'
 import type { BacktestMetrics } from '../types'
 
 interface MetricCardsProps {
@@ -24,7 +24,7 @@ export function MetricCards({ metrics }: MetricCardsProps) {
     { label: '年化波动率', value: formatPercent(metrics.annualizedVolatility) },
     { label: '夏普比率', value: formatNumber(metrics.sharpeRatio), tone: metricTone(metrics.sharpeRatio) },
     { label: '最大回撤', value: formatPercent(metrics.maxDrawdown), tone: metricTone(metrics.maxDrawdown) },
-    { label: '已平仓交易', value: formatNumber(metrics.tradeCount) },
+    { label: '已平仓交易', value: formatInteger(metrics.tradeCount) },
     { label: '胜率', value: formatPercent(metrics.winRate), tone: metricTone(metrics.winRate) },
   ]
 

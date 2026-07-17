@@ -32,10 +32,10 @@ export function ResultsDashboard({ result }: ResultsDashboardProps) {
       {result.warnings.length > 0 && <p className="result-warning" role="status">{result.warnings.join(' ')}</p>}
 
       <section className="chart-card" aria-labelledby="chart-heading">
-        <div className="chart-card-header"><h3 id="chart-heading">{title}</h3><div role="tablist" aria-label="结果图表">
-          {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls={`${tab.id}-panel`} id={`${tab.id}-tab`} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
+        <div className="chart-card-header"><h3 id="chart-heading">{title}</h3><div className="chart-tabs" aria-label="结果图表">
+          {tabs.map((tab) => <button key={tab.id} type="button" aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
         </div></div>
-        <div role="tabpanel" id={`${activeTab}-panel`} aria-labelledby={`${activeTab}-tab`}>
+        <div>
           <Suspense fallback={<p className="chart-loading" role="status">正在加载图表…</p>}>
             {activeTab === 'equity' && <EquityChart result={result} />}
             {activeTab === 'price' && <PriceChart result={result} />}

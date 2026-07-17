@@ -58,9 +58,9 @@ small { color: #657586; font-size: .76rem; font-weight: 400; line-height: 1.42; 
 .chart-card, .trades-card { border: 1px solid #dce5e8; background: #fff; }
 .chart-card-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 17px 18px 0; }
 .chart-card-header h3, .trades-card h3 { color: #18364a; font-size: 1.2rem; }
-[role="tablist"] { display: flex; gap: 4px; border-bottom: 1px solid #dbe4e7; }
-[role="tab"] { appearance: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: #657586; background: transparent; padding: 8px 7px; cursor: pointer; font-size: .79rem; font-weight: 700; white-space: nowrap; }
-[role="tab"][aria-selected="true"] { color: #087d74; border-bottom-color: #087d74; }
+.chart-tabs { display: flex; gap: 4px; border-bottom: 1px solid #dbe4e7; }
+.chart-tabs button { appearance: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: #657586; background: transparent; padding: 8px 7px; cursor: pointer; font-size: .79rem; font-weight: 700; white-space: nowrap; }
+.chart-tabs button[aria-pressed="true"] { color: #087d74; border-bottom-color: #087d74; }
 .chart-canvas { height: 320px; width: 100%; }
 .chart-loading { height: 320px; margin: 0; display: grid; place-items: center; color: #607486; font-size: .86rem; }
 .chart-legend { display: flex; gap: 18px; margin: 12px 18px 0; color: #526273; font-size: .78rem; }
@@ -75,6 +75,7 @@ caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: r
 th, td { border-bottom: 1px solid #e5ecee; padding: 10px 9px; text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
 th { color: #526979; background: #f6f9fa; font-size: .74rem; letter-spacing: .03em; }
 .table-empty { margin: 16px 0 0; border: 1px dashed #bdcbd1; background: #f8fbfc; color: #5c7180; padding: 22px; text-align: center; font-size: .9rem; }
+.table-open-status { margin: 16px 0 0; border-left: 3px solid #087d74; background: #eef9f7; color: #17645f; padding: 10px 12px; font-size: .86rem; }
 
 @media (max-width: 900px) {
   .app-shell { padding: 28px 18px 40px; }
@@ -90,5 +91,5 @@ th { color: #526979; background: #f6f9fa; font-size: .74rem; letter-spacing: .03
   .market-badge { white-space: normal; }
   .metric-card { padding: 11px; }
   .chart-canvas { height: 270px; }
-  [role="tablist"] { max-width: 100%; overflow-x: auto; }
+  .chart-tabs { max-width: 100%; overflow-x: auto; }
 }
