@@ -1,12 +1,15 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError, runBacktest } from '../api'
+import { ApiError, previewMarketData, runBacktestForDataset } from '../api'
 import type { BacktestResponse, FormState, RunState, StrategyDefinition } from '../types'
+import { StrategyControls } from './StrategyControls'
 
 interface BacktestFormProps {
   strategies: readonly StrategyDefinition[]
   onRun: (result: BacktestResponse) => void
   onStateChange?: (state: RunState) => void
 }
+
+type RunningMode = 'loading' | 'automatic' | null
 
 function localDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -64,9 +67,7 @@ function validateForm(form: FormState, strategy: StrategyDefinition | undefined)
     if (!Number.isFinite(value) || value < parameter.minimum || value > parameter.maximum) {
       return `${parameter.name}必须在 ${parameter.minimum} 到 ${parameter.maximum} 之间。`
     }
-    if (parameter.type === 'integer' && !Number.isInteger(value)) {
-      return `${parameter.name}必须为整数。`
-    }
+    if (parameter.type === 'integer' && !Number.isInteger(value)) return `${parameter.name}必须为整数。`
   }
   for (const rule of strategy.validationRules) {
     if (!relationshipIsValid(rule.expression, form.params)) return rule.message
@@ -78,17 +79,104 @@ function validateForm(form: FormState, strategy: StrategyDefinition | undefined)
   }
 }
 
+function marketFingerprint(form: FormState): string {
+  if (form.source === 'csv') {
+    const file = form.file
+    return ['csv', form.symbol.trim(), file?.name ?? '', file?.size ?? '', file?.lastModified ?? ''].join('|')
+  }
+  return ['yahoo', form.symbol.trim().toUpperCase(), form.start, form.end].join('|')
+}
+
+function backtestSignature(form: FormState): string {
+  const sortedParams = Object.entries(form.params).sort(([left], [right]) => left.localeCompare(right))
+  return JSON.stringify([form.strategyKey, sortedParams, form.initialCash, form.commission, form.slippageBps])
+}
+
+function errorMessage(caught: unknown): string {
+  return caught instanceof ApiError ? caught.message : '网络连接失败，请检查服务后重试。'
+}
+
 export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormProps) {
   const [form, setForm] = useState(() => initialForm(strategies))
   const [error, setError] = useState<string>()
-  const [running, setRunning] = useState(false)
+  const [datasetId, setDatasetId] = useState<string>()
+  const [loadedFingerprint, setLoadedFingerprint] = useState<string>()
+  const [runningMode, setRunningMode] = useState<RunningMode>(null)
   const activeRequest = useRef<AbortController | null>(null)
+  const activeMarketFingerprint = useRef<string | undefined>(undefined)
+  const lastRequestedSignature = useRef('')
   const strategy = useMemo(
     () => strategies.find((candidate) => candidate.key === form.strategyKey),
     [form.strategyKey, strategies],
   )
+  const currentMarketFingerprint = useMemo(() => marketFingerprint(form), [form])
+  const currentBacktestSignature = useMemo(() => backtestSignature(form), [form])
+  const datasetReady = Boolean(datasetId && loadedFingerprint === currentMarketFingerprint)
 
   useEffect(() => () => activeRequest.current?.abort(), [])
+
+  useEffect(() => {
+    if (activeRequest.current && activeMarketFingerprint.current !== currentMarketFingerprint) {
+      activeRequest.current.abort()
+      activeRequest.current = null
+      activeMarketFingerprint.current = undefined
+      setRunningMode(null)
+    }
+    if (datasetId && loadedFingerprint !== currentMarketFingerprint) {
+      lastRequestedSignature.current = ''
+      setDatasetId(undefined)
+      setLoadedFingerprint(undefined)
+    }
+  }, [currentMarketFingerprint, datasetId, loadedFingerprint])
+
+  useEffect(() => {
+    if (!datasetReady || !datasetId || currentBacktestSignature === lastRequestedSignature.current) return
+
+    const validationError = validateForm(form, strategy)
+    if (validationError) {
+      setError(validationError)
+      onStateChange?.('error')
+      return
+    }
+
+    let controller: AbortController | undefined
+    const timer = window.setTimeout(() => {
+      activeRequest.current?.abort()
+      controller = new AbortController()
+      activeRequest.current = controller
+      activeMarketFingerprint.current = currentMarketFingerprint
+      lastRequestedSignature.current = currentBacktestSignature
+      setError(undefined)
+      setRunningMode('automatic')
+      onStateChange?.('running')
+
+      runBacktestForDataset(form, datasetId, controller.signal)
+        .then((result) => {
+          if (!controller?.signal.aborted) {
+            onRun(result)
+            onStateChange?.('success')
+          }
+        })
+        .catch((caught: unknown) => {
+          if (!controller?.signal.aborted) {
+            setError(errorMessage(caught))
+            onStateChange?.('error')
+          }
+        })
+        .finally(() => {
+          if (activeRequest.current === controller) {
+            activeRequest.current = null
+            activeMarketFingerprint.current = undefined
+            setRunningMode(null)
+          }
+        })
+    }, 400)
+
+    return () => {
+      window.clearTimeout(timer)
+      controller?.abort()
+    }
+  }, [currentBacktestSignature, currentMarketFingerprint, datasetId, datasetReady, form, onRun, onStateChange, strategy])
 
   const updateNumber = (field: 'initialCash' | 'commission' | 'slippageBps', value: string) => {
     setForm((current) => ({ ...current, [field]: Number(value) }))
@@ -116,25 +204,34 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
     activeRequest.current?.abort()
     const controller = new AbortController()
     activeRequest.current = controller
+    activeMarketFingerprint.current = currentMarketFingerprint
+    const submittedForm = form
+    const submittedMarketFingerprint = currentMarketFingerprint
+    const submittedBacktestSignature = currentBacktestSignature
     setError(undefined)
-    setRunning(true)
+    setRunningMode('loading')
     onStateChange?.('running')
+
     try {
-      const result = await runBacktest(form, controller.signal)
+      const preview = await previewMarketData(submittedForm, controller.signal)
+      const result = await runBacktestForDataset(submittedForm, preview.datasetId, controller.signal)
       if (!controller.signal.aborted) {
+        lastRequestedSignature.current = submittedBacktestSignature
+        setDatasetId(preview.datasetId)
+        setLoadedFingerprint(submittedMarketFingerprint)
         onRun(result)
         onStateChange?.('success')
       }
     } catch (caught) {
       if (!controller.signal.aborted) {
-        const message = caught instanceof ApiError ? caught.message : '网络连接失败，请检查服务后重试。'
-        setError(message)
+        setError(errorMessage(caught))
         onStateChange?.('error')
       }
     } finally {
       if (activeRequest.current === controller) {
         activeRequest.current = null
-        setRunning(false)
+        activeMarketFingerprint.current = undefined
+        setRunningMode(null)
       }
     }
   }
@@ -195,36 +292,16 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
 
       <fieldset>
         <legend>策略</legend>
-        <label>
-          策略
-          <select aria-label="策略" value={form.strategyKey} onChange={(event) => selectStrategy(event.target.value)}>
-            {strategies.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.name}</option>)}
-          </select>
-          {strategy && <small>{strategy.description}</small>}
-        </label>
-        {strategy && strategy.parameters.length > 0 && (
-          <div className="field-grid parameters">
-            {strategy.parameters.map((parameter) => (
-              <label key={parameter.key}>
-                {parameter.name}
-                <input
-                  type="number"
-                  aria-label={parameter.name}
-                  inputMode="numeric"
-                  step={parameter.type === 'integer' ? 1 : 'any'}
-                  min={parameter.minimum}
-                  max={parameter.maximum}
-                  value={form.params[parameter.key]}
-                  onChange={(event) => setForm((current) => ({
-                    ...current,
-                    params: { ...current.params, [parameter.key]: Number(event.target.value) },
-                  }))}
-                />
-                <small>{parameter.description} 范围：{parameter.minimum}–{parameter.maximum}。</small>
-              </label>
-            ))}
-          </div>
-        )}
+        <StrategyControls
+          strategies={strategies}
+          strategyKey={form.strategyKey}
+          params={form.params}
+          onStrategyChange={selectStrategy}
+          onParamsChange={(params) => {
+            setForm((current) => ({ ...current, params }))
+            setError(undefined)
+          }}
+        />
       </fieldset>
 
       <fieldset>
@@ -246,9 +323,16 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       </fieldset>
 
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="run-button" type="submit" disabled={running || strategies.length === 0}>
-        {running ? '正在运行回测…' : '运行回测'}
-      </button>
+      {!datasetReady ? (
+        <button className="run-button" type="submit" disabled={runningMode !== null || strategies.length === 0}>
+          {runningMode === 'loading' ? '正在装载行情…' : '加载行情并开始回测'}
+        </button>
+      ) : (
+        <p className={`auto-run-status${runningMode === 'automatic' ? ' is-running' : ''}`} aria-live="polite">
+          <span aria-hidden="true" />
+          {runningMode === 'automatic' ? '正在自动回测…' : '参数调整后自动回测'}
+        </p>
+      )}
     </form>
   )
 }

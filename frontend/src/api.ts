@@ -79,15 +79,23 @@ export function toBacktestRequest(input: FormState, datasetId: string) {
   }
 }
 
+export async function runBacktestForDataset(
+  input: FormState,
+  datasetId: string,
+  signal?: AbortSignal,
+): Promise<BacktestResponse> {
+  return request<BacktestResponse>('/api/backtests', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(toBacktestRequest(input, datasetId)),
+    signal,
+  })
+}
+
 export async function runBacktest(
   input: FormState,
   signal?: AbortSignal,
 ): Promise<BacktestResponse> {
   const preview = await previewMarketData(input, signal)
-  return request<BacktestResponse>('/api/backtests', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(toBacktestRequest(input, preview.datasetId)),
-    signal,
-  })
+  return runBacktestForDataset(input, preview.datasetId, signal)
 }

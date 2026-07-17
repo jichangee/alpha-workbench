@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { previewMarketData, runBacktest } from './api'
+import { previewMarketData, runBacktest, runBacktestForDataset } from './api'
 import type { BacktestResponse, FormState } from './types'
 
 const yahooInput: FormState = {
@@ -73,5 +73,23 @@ describe('backtest API workflow', () => {
     const formData = fetchMock.mock.calls[0][1].body as FormData
     expect(formData.get('source')).toBe('csv')
     expect(formData.get('file')).toBe(file)
+  })
+
+  it('runs a backtest against an existing dataset without loading market data again', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(backtestFixture))
+
+    await expect(runBacktestForDataset(yahooInput, 'dataset-42')).resolves.toEqual(backtestFixture)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/backtests', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        datasetId: 'dataset-42',
+        strategy: { key: 'sma_cross', params: { short_window: 20, long_window: 50 } },
+        initialCash: 125000,
+        commission: 1.25,
+        slippageBps: 7,
+      }),
+    }))
   })
 })

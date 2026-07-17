@@ -3,13 +3,20 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api'
 import { BacktestForm } from './BacktestForm'
-import type { BacktestResponse } from '../types'
+import type { BacktestResponse, MarketDataPreview } from '../types'
 
-const runBacktestMock = vi.hoisted(() => vi.fn())
+const { previewMarketDataMock, runBacktestForDatasetMock } = vi.hoisted(() => ({
+  previewMarketDataMock: vi.fn(),
+  runBacktestForDatasetMock: vi.fn(),
+}))
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>()
-  return { ...actual, runBacktest: runBacktestMock }
+  return {
+    ...actual,
+    previewMarketData: previewMarketDataMock,
+    runBacktestForDataset: runBacktestForDatasetMock,
+  }
 })
 
 const catalogFixture = [
@@ -39,8 +46,12 @@ const catalogFixture = [
   },
 ] as const
 
+const previewFixture: MarketDataPreview = {
+  datasetId: 'dataset-42', symbol: 'SPY', start: '2021-01-01', end: '2021-12-31', rows: 252, preview: [], warnings: [],
+}
+
 const successfulResult: BacktestResponse = {
-  metadata: { datasetId: 'newer', strategyKey: 'buy_hold', start: '2021-01-01', end: '2021-12-31', execution: 'next_open', warmup: 0, initialCash: 100000, commission: 0, slippageBps: 5 },
+  metadata: { datasetId: 'dataset-42', strategyKey: 'buy_hold', start: '2021-01-01', end: '2021-12-31', execution: 'next_open', warmup: 0, initialCash: 100000, commission: 0, slippageBps: 5 },
   metrics: { endingEquity: 100000, totalReturn: 0, cagr: null, annualizedVolatility: null, sharpeRatio: null, maxDrawdown: 0, tradeCount: 0, winRate: null },
   series: { dates: [], open: [], high: [], low: [], close: [], cash: [], shares: [], holdings: [], equity: [], strategy: [], benchmark: [], drawdown: [], benchmarkDrawdown: [] },
   indicators: {}, fills: [], trades: [], warnings: [],
@@ -52,8 +63,19 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+async function loadMarketData() {
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: '加载行情并开始回测' }))
+  await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(1))
+  await screen.findByText('参数调整后自动回测')
+}
+
 describe('BacktestForm', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    previewMarketDataMock.mockResolvedValue(previewFixture)
+    runBacktestForDatasetMock.mockResolvedValue(successfulResult)
+  })
   afterEach(() => vi.useRealTimers())
 
   it('defaults to the five complete calendar years using local dates', () => {
@@ -65,29 +87,26 @@ describe('BacktestForm', () => {
     expect(screen.getByLabelText('开始日期')).toHaveValue('2021-01-01')
     expect(screen.getByLabelText('结束日期')).toHaveValue('2025-12-31')
   })
-  it('shows only the selected strategy parameters', async () => {
+
+  it('uses strategy buttons and shows only the selected strategy sliders', async () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
 
-    await user.selectOptions(screen.getByLabelText('策略'), 'sma_cross')
+    await user.click(screen.getByRole('button', { name: '均线交叉' }))
 
-    expect(screen.getByLabelText('短均线周期')).toBeVisible()
-    expect(screen.getByLabelText('长均线周期')).toBeVisible()
-    expect(screen.queryByLabelText('RSI 周期')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('短均线周期滑块')).toBeVisible()
+    expect(screen.getByLabelText('长均线周期滑块')).toBeVisible()
+    expect(screen.queryByLabelText('RSI 周期滑块')).not.toBeInTheDocument()
   })
 
-  it('blocks an invalid moving-average relationship with Chinese guidance', async () => {
+  it('keeps the moving-average windows valid while a slider moves', async () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: '均线交叉' }))
 
-    await user.selectOptions(screen.getByLabelText('策略'), 'sma_cross')
-    await user.clear(screen.getByLabelText('短均线周期'))
-    await user.type(screen.getByLabelText('短均线周期'), '50')
-    await user.clear(screen.getByLabelText('长均线周期'))
-    await user.type(screen.getByLabelText('长均线周期'), '20')
-    await user.click(screen.getByRole('button', { name: '运行回测' }))
+    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '50' } })
 
-    expect(screen.getByText('短均线周期必须小于长均线周期')).toBeVisible()
+    expect(screen.getByLabelText('长均线周期数值')).toHaveValue(51)
   })
 
   it('switches to the CSV upload fields when the local source is selected', async () => {
@@ -100,57 +119,117 @@ describe('BacktestForm', () => {
     expect(screen.queryByLabelText('开始日期')).not.toBeInTheDocument()
   })
 
-  it('shows a disabled running state while the submitted workflow is pending', async () => {
-    const user = userEvent.setup()
-    const pending = deferred<BacktestResponse>()
+  it('loads market data before running the first backtest', async () => {
     const onRun = vi.fn()
-    const onStateChange = vi.fn()
-    runBacktestMock.mockReturnValue(pending.promise)
-    render(<BacktestForm strategies={catalogFixture} onRun={onRun} onStateChange={onStateChange} />)
+    render(<BacktestForm strategies={catalogFixture} onRun={onRun} />)
 
-    await user.click(screen.getByRole('button', { name: '运行回测' }))
+    await loadMarketData()
 
-    expect(screen.getByRole('button', { name: '正在运行回测…' })).toBeDisabled()
-    expect(onStateChange).toHaveBeenCalledWith('running')
-    await act(async () => pending.resolve(successfulResult))
-    await waitFor(() => expect(onRun).toHaveBeenCalledWith(successfulResult))
+    expect(previewMarketDataMock).toHaveBeenCalledTimes(1)
+    expect(runBacktestForDatasetMock).toHaveBeenCalledWith(
+      expect.objectContaining({ strategyKey: 'buy_hold' }),
+      'dataset-42',
+      expect.any(AbortSignal),
+    )
+    expect(onRun).toHaveBeenCalledWith(successfulResult)
   })
 
-  it('keeps entered values and shows a Chinese API message after an API error', async () => {
+  it('shows a disabled loading state while market data is pending', async () => {
     const user = userEvent.setup()
-    runBacktestMock.mockRejectedValue(new ApiError({ code: 'MARKET_DATA_ERROR', message: '行情数据不可用，请改用 CSV。', fields: {} }))
+    const pending = deferred<MarketDataPreview>()
+    previewMarketDataMock.mockReturnValue(pending.promise)
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: '加载行情并开始回测' }))
+
+    expect(screen.getByRole('button', { name: '正在装载行情…' })).toBeDisabled()
+    await act(async () => pending.resolve(previewFixture))
+  })
+
+  it('cancels a pending market-data load when its inputs change', async () => {
+    const user = userEvent.setup()
+    const pending = deferred<MarketDataPreview>()
+    previewMarketDataMock.mockReturnValue(pending.promise)
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: '加载行情并开始回测' }))
+    const loadingSignal = previewMarketDataMock.mock.calls[0][1] as AbortSignal
+
+    await user.clear(screen.getByLabelText('股票代码'))
+    await user.type(screen.getByLabelText('股票代码'), 'AAPL')
+
+    await waitFor(() => expect(loadingSignal.aborted).toBe(true))
+    expect(screen.getByRole('button', { name: '加载行情并开始回测' })).toBeEnabled()
+  })
+
+  it('keeps entered values and shows a Chinese API message after a loading error', async () => {
+    const user = userEvent.setup()
+    previewMarketDataMock.mockRejectedValue(new ApiError({ code: 'MARKET_DATA_ERROR', message: '行情数据不可用，请改用 CSV。', fields: {} }))
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
 
     await user.clear(screen.getByLabelText('股票代码'))
     await user.type(screen.getByLabelText('股票代码'), 'MSFT')
-    await user.selectOptions(screen.getByLabelText('策略'), 'sma_cross')
-    await user.clear(screen.getByLabelText('短均线周期'))
-    await user.type(screen.getByLabelText('短均线周期'), '10')
-    await user.click(screen.getByRole('button', { name: '运行回测' }))
+    await user.click(screen.getByRole('button', { name: '加载行情并开始回测' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('行情数据不可用，请改用 CSV。')
     expect(screen.getByLabelText('股票代码')).toHaveValue('MSFT')
-    expect(screen.getByLabelText('短均线周期')).toHaveValue(10)
   })
 
-  it('aborts a previous run and ignores its stale completion when a new run starts', async () => {
+  it('debounces parameter changes and reuses the loaded dataset', async () => {
     const user = userEvent.setup()
-    const first = deferred<BacktestResponse>()
-    const second = deferred<BacktestResponse>()
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+    await loadMarketData()
+
+    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '25' } })
+
+    await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
+    expect(previewMarketDataMock).toHaveBeenCalledTimes(1)
+    expect(runBacktestForDatasetMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ strategyKey: 'sma_cross', params: { short_window: 25, long_window: 50 } }),
+      'dataset-42',
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('aborts a stale automatic run and only publishes the latest result', async () => {
+    const user = userEvent.setup()
     const onRun = vi.fn()
-    runBacktestMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     render(<BacktestForm strategies={catalogFixture} onRun={onRun} />)
-
-    await user.click(screen.getByRole('button', { name: '运行回测' }))
-    const form = screen.getByRole('button', { name: '正在运行回测…' }).closest('form')!
-    fireEvent.submit(form)
-
-    const firstSignal = runBacktestMock.mock.calls[0][1] as AbortSignal
-    expect(firstSignal.aborted).toBe(true)
-    await act(async () => first.resolve({ ...successfulResult, metadata: { ...successfulResult.metadata, datasetId: 'stale' } }))
-    expect(onRun).not.toHaveBeenCalled()
-    await act(async () => second.resolve(successfulResult))
+    await loadMarketData()
+    onRun.mockClear()
+    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
     await waitFor(() => expect(onRun).toHaveBeenCalledTimes(1))
-    expect(onRun).toHaveBeenLastCalledWith(successfulResult)
+    onRun.mockClear()
+
+    const stale = deferred<BacktestResponse>()
+    const latest = deferred<BacktestResponse>()
+    runBacktestForDatasetMock.mockReturnValueOnce(stale.promise).mockReturnValueOnce(latest.promise)
+    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '25' } })
+    await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(3), { timeout: 1000 })
+    const staleSignal = runBacktestForDatasetMock.mock.calls[2][2] as AbortSignal
+
+    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '30' } })
+    await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(4), { timeout: 1000 })
+    expect(staleSignal.aborted).toBe(true)
+
+    await act(async () => stale.resolve(successfulResult))
+    expect(onRun).not.toHaveBeenCalled()
+    const latestResult = { ...successfulResult, metadata: { ...successfulResult.metadata, strategyKey: 'sma_cross' } }
+    await act(async () => latest.resolve(latestResult))
+    await waitFor(() => expect(onRun).toHaveBeenCalledWith(latestResult))
+  })
+
+  it('invalidates loaded data when a market-data field changes', async () => {
+    const user = userEvent.setup()
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+    await loadMarketData()
+
+    await user.clear(screen.getByLabelText('股票代码'))
+    await user.type(screen.getByLabelText('股票代码'), 'AAPL')
+
+    expect(await screen.findByRole('button', { name: '加载行情并开始回测' })).toBeVisible()
+    expect(previewMarketDataMock).toHaveBeenCalledTimes(1)
+    expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(1)
   })
 })
