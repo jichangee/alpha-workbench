@@ -242,8 +242,8 @@ export function PortfolioComparisonForm({ onCompare, disabled }: PortfolioCompar
       </div>
 
       {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="primary-action" type="submit" disabled={disabled}>
-        {disabled ? '正在对比…' : '开始对比'}
+      <button className="primary-action" type="submit">
+        {disabled ? '重新对比' : '开始对比'}
       </button>
     </form>
   )
