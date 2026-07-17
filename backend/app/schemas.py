@@ -1,7 +1,8 @@
 from datetime import date
+from math import isfinite
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 StrategyKey = Literal["buy_hold", "sma_cross", "rsi_reversal", "donchian"]
@@ -73,4 +74,110 @@ class MarketDataPreview(BaseModel):
     end: date
     rows: int
     preview: list[MarketDataBarPreview] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class BacktestRequest(BaseModel):
+    """The configuration needed to execute a stored market-data dataset."""
+
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
+
+    datasetId: str
+    strategy: StrategyConfig
+    initialCash: float
+    commission: float
+    slippageBps: float
+
+    @field_validator("initialCash")
+    @classmethod
+    def initial_cash_must_be_positive(cls, value: float) -> float:
+        if not isfinite(value) or value <= 0:
+            raise ValueError("初始资金必须是有限正数")
+        return value
+
+    @field_validator("commission")
+    @classmethod
+    def commission_must_be_non_negative(cls, value: float) -> float:
+        if not isfinite(value) or value < 0:
+            raise ValueError("佣金必须是有限非负数")
+        return value
+
+    @field_validator("slippageBps")
+    @classmethod
+    def slippage_must_be_in_range(cls, value: float) -> float:
+        if not isfinite(value) or not 0 <= value < 10_000:
+            raise ValueError("滑点基点必须在 0（含）到 10000（不含）之间")
+        return value
+
+
+class BacktestMetadata(BaseModel):
+    dataset_id: str = Field(serialization_alias="datasetId")
+    strategy_key: StrategyKey = Field(serialization_alias="strategyKey")
+    start: date
+    end: date
+    execution: Literal["next_open"]
+    warmup: int
+    initial_cash: float = Field(serialization_alias="initialCash")
+    commission: float
+    slippage_bps: float = Field(serialization_alias="slippageBps")
+
+
+class BacktestMetrics(BaseModel):
+    ending_equity: float = Field(serialization_alias="endingEquity")
+    total_return: float | None = Field(serialization_alias="totalReturn")
+    cagr: float | None
+    annualized_volatility: float | None = Field(serialization_alias="annualizedVolatility")
+    sharpe_ratio: float | None = Field(serialization_alias="sharpeRatio")
+    max_drawdown: float | None = Field(serialization_alias="maxDrawdown")
+    trade_count: int = Field(serialization_alias="tradeCount")
+    win_rate: float | None = Field(serialization_alias="winRate")
+
+
+class BacktestSeries(BaseModel):
+    dates: list[date]
+    open: list[float | None]
+    high: list[float | None]
+    low: list[float | None]
+    close: list[float | None]
+    cash: list[float | None]
+    shares: list[int | None]
+    holdings: list[float | None]
+    equity: list[float | None]
+    strategy: list[float | None]
+    benchmark: list[float | None]
+    drawdown: list[float | None]
+    benchmark_drawdown: list[float | None] = Field(
+        serialization_alias="benchmarkDrawdown"
+    )
+
+
+class BacktestFill(BaseModel):
+    date: date
+    side: Literal["buy", "sell"]
+    price: float
+    shares: int
+    commission: float
+    notional: float
+
+
+class BacktestTrade(BaseModel):
+    entry_date: date = Field(serialization_alias="entryDate")
+    entry_price: float = Field(serialization_alias="entryPrice")
+    shares: int
+    exit_date: date | None = Field(serialization_alias="exitDate")
+    exit_price: float | None = Field(serialization_alias="exitPrice")
+    gross_pnl: float | None = Field(serialization_alias="grossPnl")
+    costs: float
+    net_pnl: float | None = Field(serialization_alias="netPnl")
+    return_pct: float | None = Field(serialization_alias="returnPct")
+    is_open: bool = Field(serialization_alias="isOpen")
+
+
+class BacktestResponse(BaseModel):
+    metadata: BacktestMetadata
+    metrics: BacktestMetrics
+    series: BacktestSeries
+    indicators: dict[str, list[float | None]] = Field(default_factory=dict)
+    fills: list[BacktestFill] = Field(default_factory=list)
+    trades: list[BacktestTrade] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

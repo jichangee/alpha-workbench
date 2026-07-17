@@ -6,11 +6,19 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .backtests import (
+    BacktestError,
+    BacktestValidationError,
+    DatasetNotFoundError,
+    run_backtest,
+)
 from .catalog import STRATEGIES
 from .datasets import DatasetStore
 from .market_data import MarketDataError, load_yahoo, normalize_bars
 from .schemas import (
     DatasetMetadata,
+    BacktestRequest,
+    BacktestResponse,
     MarketDataBarPreview,
     MarketDataPreview,
     MarketDataSource,
@@ -41,6 +49,28 @@ def health() -> dict[str, str]:
 @app.get("/api/strategies", response_model=list[StrategyDefinition])
 def strategies() -> list[StrategyDefinition]:
     return STRATEGIES
+
+
+@app.post("/api/backtests", response_model=BacktestResponse)
+def backtest(request: BacktestRequest) -> BacktestResponse | JSONResponse:
+    try:
+        return run_backtest(dataset_store, request)
+    except DatasetNotFoundError:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "code": "DATASET_NOT_FOUND",
+                "message": "未找到数据集，请重新加载行情数据",
+                "fields": {},
+            },
+        )
+    except BacktestValidationError as error:
+        return _validation_error(error.fields)
+    except BacktestError as error:
+        return JSONResponse(
+            status_code=400,
+            content={"code": "BACKTEST_ERROR", "message": str(error), "fields": {}},
+        )
 
 
 @app.post("/api/market-data/preview", response_model=MarketDataPreview)
