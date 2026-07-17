@@ -114,6 +114,35 @@ def test_rejects_more_than_eight_positions():
         PortfolioComparisonRequest.model_validate(payload)
 
 
+def test_accepts_five_portfolios():
+    payload = request_payload()
+    payload["portfolios"].extend(
+        {
+            "name": f"持仓 {index}",
+            "positions": [{"symbol": f"S{index}", "weight": 1}],
+        }
+        for index in range(3, 6)
+    )
+
+    request = PortfolioComparisonRequest.model_validate(payload)
+
+    assert len(request.portfolios) == 5
+
+
+def test_rejects_six_portfolios():
+    payload = request_payload()
+    payload["portfolios"].extend(
+        {
+            "name": f"持仓 {index}",
+            "positions": [{"symbol": f"S{index}", "weight": 1}],
+        }
+        for index in range(3, 7)
+    )
+
+    with pytest.raises(ValidationError, match="at most 5"):
+        PortfolioComparisonRequest.model_validate(payload)
+
+
 def test_rejects_fewer_than_two_common_observations():
     request = PortfolioComparisonRequest.model_validate(request_payload())
 

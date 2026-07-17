@@ -153,7 +153,7 @@ export interface PortfolioDefinitionInput {
 export interface PortfolioComparisonInput {
   start: string
   end: string
-  portfolios: [PortfolioDefinitionInput, PortfolioDefinitionInput]
+  portfolios: PortfolioDefinitionInput[]
 }
 
 export interface PortfolioComparisonMetrics {
@@ -172,7 +172,7 @@ export interface PortfolioComparisonResponse {
   start: string
   end: string
   dates: string[]
-  portfolios: [PortfolioComparisonSeries, PortfolioComparisonSeries]
+  portfolios: PortfolioComparisonSeries[]
 }
 
 export interface ApiProblem {

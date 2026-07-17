@@ -231,11 +231,11 @@ class PortfolioDefinition(BaseModel):
 
 
 class PortfolioComparisonRequest(BaseModel):
-    """Two portfolios and the requested Yahoo history range."""
+    """Two to five portfolios and the requested Yahoo history range."""
 
     start: date
     end: date
-    portfolios: list[PortfolioDefinition] = Field(min_length=2, max_length=2)
+    portfolios: list[PortfolioDefinition] = Field(min_length=2, max_length=5)
 
     @model_validator(mode="after")
     def validate_dates(self) -> "PortfolioComparisonRequest":

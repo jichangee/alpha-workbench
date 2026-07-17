@@ -74,6 +74,34 @@ def test_downloads_each_unique_symbol_once_and_returns_curves(monkeypatch):
     assert "annualizedVolatility" in payload["portfolios"][0]["metrics"]
 
 
+def test_accepts_a_third_portfolio_without_redownloading_shared_symbols(monkeypatch):
+    request = valid_request()
+    request["portfolios"].append(
+        {
+            "name": "持仓 3",
+            "positions": [{"symbol": "VOO", "weight": 1}],
+        }
+    )
+    calls: list[str] = []
+    histories = {
+        "VOO": bars([100, 110, 120]),
+        "QQQ": bars([100, 90, 100]),
+        "SOXX": bars([100, 120, 140]),
+    }
+
+    def fake_load(symbol: str, *_args) -> pd.DataFrame:
+        calls.append(symbol)
+        return histories[symbol]
+
+    monkeypatch.setattr(main, "load_yahoo", fake_load)
+
+    response = client.post("/api/portfolio-comparisons", json=request)
+
+    assert response.status_code == 200
+    assert calls == ["VOO", "QQQ", "SOXX"]
+    assert len(response.json()["portfolios"]) == 3
+
+
 def test_rejects_invalid_weight_total_without_downloading(monkeypatch):
     request = valid_request()
     request["portfolios"][0]["positions"][0]["weight"] = 0.4
