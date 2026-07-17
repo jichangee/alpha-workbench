@@ -20,7 +20,7 @@ class Metrics:
     cagr: float | None
     annualized_volatility: float | None
     sharpe_ratio: float | None
-    max_drawdown: float
+    max_drawdown: float | None
     trade_count: int
     win_rate: float | None
 
@@ -45,15 +45,16 @@ def calculate_metrics(
     else:
         daily_std = float(daily_returns.std(ddof=1))
         annualized_volatility = _finite_or_none(daily_std * sqrt(252))
-        if abs(daily_std) <= 1e-15:
+        if not isfinite(daily_std) or daily_std == 0:
             sharpe_ratio = None
         else:
             sharpe_ratio = _finite_or_none(
                 float(daily_returns.mean()) / daily_std * sqrt(252)
             )
 
-    drawdown = values / values.cummax() - 1
-    max_drawdown = float(drawdown.min())
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        drawdown = values / values.cummax() - 1
+    max_drawdown = _finite_or_none(float(drawdown.min()))
     closed_trades = [trade for trade in trades if trade.exit_date is not None]
     win_rate = (
         sum(trade.net_pnl is not None and trade.net_pnl > 0 for trade in closed_trades)

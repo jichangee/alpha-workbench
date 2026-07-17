@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -146,3 +147,45 @@ def test_engine_rejects_target_with_different_dates():
 
     with pytest.raises(EngineError, match="目标持仓必须与行情日期完全对齐"):
         run_engine(bars, target, 100, commission=0, slippage_bps=0)
+
+
+@pytest.mark.parametrize(
+    ("opens", "closes", "target_values", "initial_cash", "slippage_bps"),
+    [
+        ([1, 1e-308], [1, 1e-308], [0, 0], 1e308, 0),
+        ([1, 1e308], [1, 1e308], [1, 1], 100, 9_999),
+        ([1, 1], [1, 1e308], [1, 1], 1e308, 0),
+        ([1e-308, 1e-308], [1e-308, 1e308], [1, 1], 1e-308, 0),
+        ([1, 1, 1e308], [1, 1, 1e308], [1, 0, 0], 1e308, 0),
+    ],
+    ids=[
+        "benchmark-affordable-shares",
+        "slipped-fill-price",
+        "position-holdings",
+        "normalized-equity",
+        "sale-proceeds",
+    ],
+)
+def test_engine_maps_extreme_finite_arithmetic_to_engine_error(
+    opens, closes, target_values, initial_cash, slippage_bps
+):
+    bars = make_bars(opens=opens, closes=closes)
+    target = pd.Series(target_values, index=bars.index)
+
+    with pytest.raises(EngineError, match="超出有限数值范围"):
+        run_engine(
+            bars,
+            target,
+            initial_cash,
+            commission=0,
+            slippage_bps=slippage_bps,
+        )
+
+
+def test_engine_returns_only_finite_equity_for_large_representable_values():
+    bars = make_bars(opens=[1e100, 1e100], closes=[1e100, 1.1e100])
+    target = pd.Series([1, 1], index=bars.index)
+
+    result = run_engine(bars, target, 1e200, commission=0, slippage_bps=5)
+
+    assert np.isfinite(result.equity.to_numpy(dtype=float)).all()

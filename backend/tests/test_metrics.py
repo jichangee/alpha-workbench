@@ -112,3 +112,33 @@ def test_negative_ending_equity_has_no_real_valued_cagr():
     assert metrics.cagr is None
     assert metrics.max_drawdown == pytest.approx(-1.1)
     json.dumps(metrics.__dict__, allow_nan=False)
+
+
+def test_unrepresentable_drawdown_becomes_none_instead_of_negative_infinity():
+    metrics = calculate_metrics(pd.Series([1e-300, -1e300]), [], 1e-300)
+
+    assert metrics.max_drawdown is None
+    json.dumps(metrics.__dict__, allow_nan=False)
+
+
+def test_tiny_nonzero_volatility_still_produces_finite_sharpe():
+    first_return = 1e-8
+    second_return = first_return + 4e-16
+    equity = pd.Series(
+        [
+            1.0,
+            1.0 * (1 + first_return),
+            1.0 * (1 + first_return) * (1 + second_return),
+        ]
+    )
+    daily_returns = equity.pct_change(fill_method=None).dropna()
+    daily_std = float(daily_returns.std(ddof=1))
+    assert 0 < daily_std < 1e-15
+
+    metrics = calculate_metrics(equity, [], 1)
+
+    expected = float(daily_returns.mean()) / daily_std * sqrt(252)
+    assert metrics.sharpe_ratio == pytest.approx(expected)
+    assert metrics.sharpe_ratio is not None
+    assert metrics.sharpe_ratio > 0
+    json.dumps(metrics.__dict__, allow_nan=False)
