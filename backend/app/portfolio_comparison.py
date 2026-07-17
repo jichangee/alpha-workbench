@@ -77,7 +77,7 @@ def _calculate_portfolio(portfolio, closes: pd.DataFrame) -> PortfolioComparison
         float(returns.std(ddof=1) * sqrt(252)) if len(returns) >= 2 else None
     )
     metrics = PortfolioComparisonMetrics(
-        total_return=float(equity.iloc[-1] / equity.iloc[0] - 1),
+        total_return=round(float(equity.iloc[-1] / equity.iloc[0] - 1), 12),
         cagr=cagr,
         annualized_volatility=volatility,
         max_drawdown=float(drawdown.min()),
@@ -85,6 +85,6 @@ def _calculate_portfolio(portfolio, closes: pd.DataFrame) -> PortfolioComparison
     return PortfolioComparisonSeries(
         name=portfolio.name,
         positions=portfolio.positions,
-        equity=[float(value) for value in equity],
+        equity=[round(float(value), 10) for value in equity],
         metrics=metrics,
     )

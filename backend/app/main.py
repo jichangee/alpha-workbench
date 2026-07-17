@@ -17,6 +17,10 @@ from .backtests import (
 from .catalog import STRATEGIES
 from .datasets import DatasetStore
 from .market_data import MarketDataError, load_yahoo, normalize_bars
+from .portfolio_comparison import (
+    PortfolioComparisonError,
+    calculate_portfolio_comparison,
+)
 from .schemas import (
     BacktestRequest,
     DatasetMetadata,
@@ -24,6 +28,8 @@ from .schemas import (
     MarketDataBarPreview,
     MarketDataPreview,
     MarketDataSource,
+    PortfolioComparisonRequest,
+    PortfolioComparisonResponse,
     StrategyDefinition,
 )
 
@@ -150,6 +156,43 @@ def preview_market_data(
         ],
         warnings=[],
     )
+
+
+@app.post("/api/portfolio-comparisons", response_model=PortfolioComparisonResponse)
+def portfolio_comparison(
+    request: PortfolioComparisonRequest,
+) -> PortfolioComparisonResponse | JSONResponse:
+    symbols = list(
+        dict.fromkeys(
+            position.symbol
+            for portfolio in request.portfolios
+            for position in portfolio.positions
+        )
+    )
+    try:
+        bars_by_symbol = {
+            symbol: load_yahoo(symbol, request.start, request.end)
+            for symbol in symbols
+        }
+        return calculate_portfolio_comparison(request, bars_by_symbol)
+    except MarketDataError as error:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "code": "MARKET_DATA_ERROR",
+                "message": str(error),
+                "fields": {},
+            },
+        )
+    except PortfolioComparisonError as error:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "code": "PORTFOLIO_COMPARISON_ERROR",
+                "message": str(error),
+                "fields": {},
+            },
+        )
 
 
 def _validation_error(fields: dict[str, str]) -> JSONResponse:
