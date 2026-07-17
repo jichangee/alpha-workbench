@@ -58,7 +58,9 @@ async def preview_market_data(
             bars = normalize_bars(pd.read_csv(BytesIO(await file.read())))
         except pd.errors.EmptyDataError:
             return _validation_error({"file": "CSV 文件不能为空"})
-        except (MarketDataError, pd.errors.ParserError, UnicodeDecodeError) as error:
+        except (pd.errors.ParserError, UnicodeDecodeError):
+            return _validation_error({"file": "CSV 文件格式或编码无效"})
+        except MarketDataError as error:
             return _validation_error({"file": str(error)})
         normalized_symbol = (
             symbol.strip().upper()

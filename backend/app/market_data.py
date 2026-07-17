@@ -18,7 +18,7 @@ class MarketDataError(ValueError):
 
 
 def normalize_bars(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return chronologically sorted daily OHLC bars in a canonical format."""
+    """Return daily OHLC bars, retaining the last supplied row for each calendar date."""
     bars = frame.copy()
     bars.columns = [str(column).strip().title() for column in bars.columns]
     if "Date" in bars.columns:
@@ -31,7 +31,7 @@ def normalize_bars(frame: pd.DataFrame) -> pd.DataFrame:
         raise MarketDataError(f"缺少必需行情列：{', '.join(missing)}")
 
     try:
-        bars.index = pd.to_datetime(bars.index, errors="raise").tz_localize(None)
+        bars.index = pd.to_datetime(bars.index, errors="raise").tz_localize(None).normalize()
     except (TypeError, ValueError) as error:
         raise MarketDataError("日期格式无效") from error
 
@@ -73,6 +73,7 @@ def load_yahoo(symbol: str, start: date, end: date) -> pd.DataFrame:
             normalized_symbol,
             start=start,
             end=end,
+            interval="1d",
             auto_adjust=True,
             progress=False,
         )

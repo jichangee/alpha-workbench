@@ -73,8 +73,8 @@ def test_load_yahoo_normalizes_one_symbol_multiindex_and_uses_disk_cache(
     raw = valid_frame()
     raw.columns = pd.MultiIndex.from_product([raw.columns, ["SPY"]])
 
-    def fake_download(symbol, *, start, end, auto_adjust, progress):
-        calls.append((symbol, start, end, auto_adjust, progress))
+    def fake_download(symbol, *, start, end, interval, auto_adjust, progress):
+        calls.append((symbol, start, end, interval, auto_adjust, progress))
         return raw
 
     monkeypatch.setattr(market_data, "CACHE_DIR", tmp_path)
@@ -85,7 +85,7 @@ def test_load_yahoo_normalizes_one_symbol_multiindex_and_uses_disk_cache(
 
     assert list(first.columns[:4]) == ["Open", "High", "Low", "Close"]
     assert first.equals(second)
-    assert calls == [("SPY", date(2024, 1, 2), date(2024, 1, 4), True, False)]
+    assert calls == [("SPY", date(2024, 1, 2), date(2024, 1, 4), "1d", True, False)]
 
 
 def test_preview_accepts_csv_and_returns_dataset_summary():
@@ -224,3 +224,54 @@ def test_preview_rejects_blank_yahoo_symbol_before_loading(monkeypatch):
 
     assert response.status_code == 422
     assert response.json()["fields"] == {"symbol": "请输入股票代码"}
+
+
+def test_preview_maps_malformed_csv_to_chinese_actionable_error():
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/market-data/preview",
+        data={"source": "csv"},
+        files={
+            "file": (
+                "malformed.csv",
+                b'Date,Open,High,Low,Close\n"2024-01-02,100,102,99,101',
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["fields"] == {"file": "CSV 文件格式或编码无效"}
+
+
+def test_preview_maps_invalid_utf8_csv_to_chinese_actionable_error():
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/market-data/preview",
+        data={"source": "csv"},
+        files={"file": ("invalid.csv", b"\xff\xfe", "text/csv")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["fields"] == {"file": "CSV 文件格式或编码无效"}
+
+
+def test_normalize_bars_collapses_intraday_rows_by_date_keeping_last():
+    raw = pd.DataFrame(
+        {
+            "Open": [100, 101, 102],
+            "High": [102, 103, 104],
+            "Low": [99, 100, 101],
+            "Close": [101, 102, 103],
+        },
+        index=pd.to_datetime(
+            ["2024-01-02 09:30", "2024-01-02 16:00", "2024-01-03 16:00"]
+        ),
+    )
+
+    bars = normalize_bars(raw)
+
+    assert list(bars.index.strftime("%Y-%m-%d")) == ["2024-01-02", "2024-01-03"]
+    assert list(bars["Close"]) == [102, 103]
