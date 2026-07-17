@@ -4,6 +4,7 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import { init, use } from 'echarts/core'
 import { SVGRenderer } from 'echarts/renderers'
 import type { BacktestResponse } from '../types'
+import { attachChartGroup } from './chartSync'
 
 use([LineChart, GridComponent, LegendComponent, TooltipComponent, SVGRenderer])
 
@@ -22,6 +23,7 @@ export function EquityChart({ result }: EquityChartProps) {
   useEffect(() => {
     if (!container.current) return
     const chart = init(container.current, undefined, { renderer: 'svg' })
+    attachChartGroup(chart)
     const resize = () => chart.resize()
     const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize)
     resizeObserver?.observe(container.current)

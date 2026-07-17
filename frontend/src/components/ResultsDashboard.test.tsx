@@ -5,6 +5,7 @@ import { ResultsDashboard } from './ResultsDashboard'
 import type { BacktestResponse } from '../types'
 
 vi.mock('echarts/core', () => ({
+  connect: vi.fn(),
   init: () => ({ dispose: vi.fn(), resize: vi.fn(), setOption: vi.fn() }),
   use: vi.fn(),
 }))

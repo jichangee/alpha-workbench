@@ -5,6 +5,7 @@ import { init, use } from 'echarts/core'
 import { SVGRenderer } from 'echarts/renderers'
 import { indicatorLabel } from '../displayLabels'
 import type { BacktestResponse } from '../types'
+import { attachChartGroup } from './chartSync'
 
 use([
   CandlestickChart,
@@ -71,6 +72,7 @@ export function PriceChart({ result }: PriceChartProps) {
   useEffect(() => {
     if (!container.current) return
     const chart = init(container.current, undefined, { renderer: 'svg' })
+    attachChartGroup(chart)
     const resize = () => chart.resize()
     const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(resize)
     resizeObserver?.observe(container.current)
