@@ -80,4 +80,56 @@ describe('PortfolioComparisonForm', () => {
     expect(onCompare).not.toHaveBeenCalled()
     expect(screen.getByRole('alert')).toHaveTextContent('同一持仓不能重复添加股票。')
   })
+
+  it('adds a third 100% portfolio and submits every portfolio', async () => {
+    const user = userEvent.setup()
+    const onCompare = vi.fn()
+    render(<PortfolioComparisonForm onCompare={onCompare} running={false} />)
+
+    await user.click(screen.getByRole('button', { name: '新增持仓' }))
+
+    expect(screen.getByRole('heading', { name: '编辑 3 组持仓' })).toBeVisible()
+    expect(screen.getByLabelText('持仓 3 名称')).toHaveValue('持仓 3')
+    expect(screen.getByLabelText('持仓 3 第 1 只股票权重')).toHaveValue(100)
+    await user.type(screen.getByLabelText('持仓 3 第 1 只股票代码'), 'aapl')
+    await user.click(screen.getByRole('button', { name: '开始对比' }))
+
+    expect(onCompare).toHaveBeenCalledTimes(1)
+    expect(onCompare.mock.calls[0][0].portfolios).toHaveLength(3)
+    expect(onCompare.mock.calls[0][0].portfolios[2]).toEqual({
+      name: '持仓 3',
+      positions: [{ symbol: 'AAPL', weight: 1 }],
+    })
+  })
+
+  it('keeps at least two portfolios and preserves remaining data after deletion', async () => {
+    const user = userEvent.setup()
+    render(<PortfolioComparisonForm onCompare={vi.fn()} running={false} />)
+
+    expect(screen.getByRole('button', { name: '删除持仓 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '删除持仓 2' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: '新增持仓' }))
+    await user.type(screen.getByLabelText('持仓 3 第 1 只股票代码'), 'AAPL')
+    await user.click(screen.getByRole('button', { name: '删除持仓 2' }))
+
+    expect(screen.queryByDisplayValue('SOXX')).not.toBeInTheDocument()
+    expect(screen.getByDisplayValue('AAPL')).toBeVisible()
+    expect(screen.getByDisplayValue('持仓 3')).toBeVisible()
+    expect(screen.getByRole('button', { name: '删除持仓 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '删除持仓 3' })).toBeDisabled()
+  })
+
+  it('limits comparison to five portfolios', async () => {
+    const user = userEvent.setup()
+    render(<PortfolioComparisonForm onCompare={vi.fn()} running={false} />)
+
+    await user.click(screen.getByRole('button', { name: '新增持仓' }))
+    await user.click(screen.getByRole('button', { name: '新增持仓' }))
+    await user.click(screen.getByRole('button', { name: '新增持仓' }))
+
+    expect(screen.getByRole('heading', { name: '编辑 5 组持仓' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '新增持仓' })).toBeDisabled()
+    expect(screen.getByText('最多 5 组')).toBeVisible()
+  })
 })

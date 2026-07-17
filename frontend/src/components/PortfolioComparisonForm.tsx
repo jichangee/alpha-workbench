@@ -13,6 +13,8 @@ interface PositionDraft {
 }
 
 interface PortfolioDraft {
+  id: number
+  number: number
   name: string
   positions: PositionDraft[]
 }
@@ -32,8 +34,11 @@ function initialDates(): { start: string; end: string } {
   }
 }
 
-const initialPortfolios: [PortfolioDraft, PortfolioDraft] = [
+function initialPortfolios(): PortfolioDraft[] {
+  return [
   {
+    id: 1,
+    number: 1,
     name: '持仓 1',
     positions: [
       { id: 1, symbol: 'VOO', weight: '50' },
@@ -41,10 +46,13 @@ const initialPortfolios: [PortfolioDraft, PortfolioDraft] = [
     ],
   },
   {
+    id: 2,
+    number: 2,
     name: '持仓 2',
     positions: [{ id: 3, symbol: 'SOXX', weight: '100' }],
   },
-]
+  ]
+}
 
 function totalWeight(portfolio: PortfolioDraft): number {
   return portfolio.positions.reduce((total, position) => {
@@ -88,27 +96,29 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
   const [portfolios, setPortfolios] = useState<PortfolioDraft[]>(initialPortfolios)
   const [error, setError] = useState<string>()
   const nextPositionId = useRef(4)
+  const nextPortfolioId = useRef(3)
+  const nextPortfolioNumber = useRef(3)
 
-  const updatePortfolio = (portfolioIndex: number, update: (portfolio: PortfolioDraft) => PortfolioDraft) => {
-    setPortfolios((current) => current.map((portfolio, index) => (
-      index === portfolioIndex ? update(portfolio) : portfolio
+  const updatePortfolio = (portfolioId: number, update: (portfolio: PortfolioDraft) => PortfolioDraft) => {
+    setPortfolios((current) => current.map((portfolio) => (
+      portfolio.id === portfolioId ? update(portfolio) : portfolio
     )))
     setError(undefined)
   }
 
   const updatePosition = (
-    portfolioIndex: number,
+    portfolioId: number,
     positionId: number,
     field: 'symbol' | 'weight',
     value: string,
-  ) => updatePortfolio(portfolioIndex, (portfolio) => ({
+  ) => updatePortfolio(portfolioId, (portfolio) => ({
     ...portfolio,
     positions: portfolio.positions.map((position) => (
       position.id === positionId ? { ...position, [field]: value } : position
     )),
   }))
 
-  const addPosition = (portfolioIndex: number) => updatePortfolio(portfolioIndex, (portfolio) => ({
+  const addPosition = (portfolioId: number) => updatePortfolio(portfolioId, (portfolio) => ({
     ...portfolio,
     positions: portfolio.positions.length >= 8 ? portfolio.positions : [
       ...portfolio.positions,
@@ -116,8 +126,8 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
     ],
   }))
 
-  const removePosition = (portfolioIndex: number, positionId: number) => updatePortfolio(
-    portfolioIndex,
+  const removePosition = (portfolioId: number, positionId: number) => updatePortfolio(
+    portfolioId,
     (portfolio) => ({
       ...portfolio,
       positions: portfolio.positions.length === 1
@@ -125,6 +135,30 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
         : portfolio.positions.filter((position) => position.id !== positionId),
     }),
   )
+
+  const addPortfolio = () => {
+    if (portfolios.length >= 5) return
+    const portfolioNumber = nextPortfolioNumber.current++
+    const portfolio: PortfolioDraft = {
+      id: nextPortfolioId.current++,
+      number: portfolioNumber,
+      name: `持仓 ${portfolioNumber}`,
+      positions: [{
+        id: nextPositionId.current++,
+        symbol: '',
+        weight: '100',
+      }],
+    }
+    setPortfolios((current) => [...current, portfolio])
+    setError(undefined)
+  }
+
+  const removePortfolio = (portfolioId: number) => {
+    setPortfolios((current) => current.length <= 2
+      ? current
+      : current.filter((portfolio) => portfolio.id !== portfolioId))
+    setError(undefined)
+  }
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -144,7 +178,7 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
     onCompare({
       start,
       end,
-      portfolios: [normalized[0], normalized[1]],
+      portfolios: normalized,
     })
   }
 
@@ -153,7 +187,7 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
       <div className="section-heading">
         <div>
           <p className="eyebrow">PORTFOLIOS</p>
-          <h2>编辑两组持仓</h2>
+          <h2>编辑 {portfolios.length} 组持仓</h2>
         </div>
         <p>首日按权重买入，之后不再平衡。</p>
       </div>
@@ -173,17 +207,29 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
         {portfolios.map((portfolio, portfolioIndex) => {
           const total = totalWeight(portfolio)
           const totalIsValid = Math.abs(total - 100) <= 0.0001
+          const portfolioLabel = `持仓 ${portfolio.number}`
           return (
-            <section className="portfolio-card" key={portfolioIndex} aria-label={`持仓 ${portfolioIndex + 1} 编辑器`}>
-              <label className="portfolio-name-field">
-                <span>持仓名称</span>
-                <input
-                  aria-label={`持仓 ${portfolioIndex + 1} 名称`}
-                  value={portfolio.name}
-                  maxLength={40}
-                  onChange={(event) => updatePortfolio(portfolioIndex, (current) => ({ ...current, name: event.target.value }))}
-                />
-              </label>
+            <section className={`portfolio-card portfolio-editor-tone-${portfolioIndex + 1}`} key={portfolio.id} aria-label={`${portfolioLabel} 编辑器`}>
+              <div className="portfolio-card-heading">
+                <label className="portfolio-name-field">
+                  <span>持仓名称</span>
+                  <input
+                    aria-label={`${portfolioLabel} 名称`}
+                    value={portfolio.name}
+                    maxLength={40}
+                    onChange={(event) => updatePortfolio(portfolio.id, (current) => ({ ...current, name: event.target.value }))}
+                  />
+                </label>
+                <button
+                  className="portfolio-remove-button"
+                  type="button"
+                  aria-label={`删除${portfolioLabel}`}
+                  disabled={portfolios.length <= 2}
+                  onClick={() => removePortfolio(portfolio.id)}
+                >
+                  删除此持仓
+                </button>
+              </div>
 
               <div className="position-column-labels" aria-hidden="true">
                 <span>股票代码</span><span>权重</span><span />
@@ -191,31 +237,31 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
               {portfolio.positions.map((position, positionIndex) => (
                 <div className="position-row" key={position.id}>
                   <input
-                    aria-label={`持仓 ${portfolioIndex + 1} 第 ${positionIndex + 1} 只股票代码`}
+                    aria-label={`${portfolioLabel} 第 ${positionIndex + 1} 只股票代码`}
                     value={position.symbol}
                     maxLength={15}
                     placeholder="如 VOO"
                     autoCapitalize="characters"
-                    onChange={(event) => updatePosition(portfolioIndex, position.id, 'symbol', event.target.value.toUpperCase())}
+                    onChange={(event) => updatePosition(portfolio.id, position.id, 'symbol', event.target.value.toUpperCase())}
                   />
                   <label className="weight-input">
                     <input
-                      aria-label={`持仓 ${portfolioIndex + 1} 第 ${positionIndex + 1} 只股票权重`}
+                      aria-label={`${portfolioLabel} 第 ${positionIndex + 1} 只股票权重`}
                       type="number"
                       min="0.01"
                       max="100"
                       step="0.01"
                       value={position.weight}
-                      onChange={(event) => updatePosition(portfolioIndex, position.id, 'weight', event.target.value)}
+                      onChange={(event) => updatePosition(portfolio.id, position.id, 'weight', event.target.value)}
                     />
                     <span>%</span>
                   </label>
                   <button
                     className="icon-button"
                     type="button"
-                    aria-label={`删除持仓 ${portfolioIndex + 1} 第 ${positionIndex + 1} 只股票`}
+                    aria-label={`删除${portfolioLabel} 第 ${positionIndex + 1} 只股票`}
                     disabled={portfolio.positions.length === 1}
-                    onClick={() => removePosition(portfolioIndex, position.id)}
+                    onClick={() => removePosition(portfolio.id, position.id)}
                   >
                     ×
                   </button>
@@ -226,9 +272,9 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
                 <button
                   className="text-button"
                   type="button"
-                  aria-label={`为持仓 ${portfolioIndex + 1} 添加股票`}
+                  aria-label={`为${portfolioLabel} 添加股票`}
                   disabled={portfolio.positions.length >= 8}
-                  onClick={() => addPosition(portfolioIndex)}
+                  onClick={() => addPosition(portfolio.id)}
                 >
                   + 添加股票
                 </button>
@@ -239,6 +285,19 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
             </section>
           )
         })}
+      </div>
+
+      <div className="portfolio-add-row">
+        <button
+          className="portfolio-add-button"
+          type="button"
+          aria-label="新增持仓"
+          disabled={portfolios.length >= 5}
+          onClick={addPortfolio}
+        >
+          + 新增持仓
+        </button>
+        <span>{portfolios.length >= 5 ? '最多 5 组' : `当前 ${portfolios.length} / 5 组`}</span>
       </div>
 
       {error && <p className="form-error" role="alert">{error}</p>}
