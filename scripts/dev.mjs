@@ -5,6 +5,55 @@ import path from 'node:path'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 export const API_PORT = 8765
 
+function normalizedCommand(command, platform) {
+  return platform === 'win32' ? command.toLowerCase() : command
+}
+
+export function isProjectBackendCommand(command, { python, port, platform }) {
+  const haystack = normalizedCommand(command, platform)
+  const expectedPython = normalizedCommand(python, platform)
+  const pythonPrefixes = [
+    expectedPython,
+    `"${expectedPython}"`,
+    `'${expectedPython}'`,
+  ]
+  const usesExpectedPython = pythonPrefixes.some(
+    (prefix) => haystack === prefix || haystack.startsWith(`${prefix} `),
+  )
+
+  return usesExpectedPython
+    && /(?:^|\s)-m\s+uvicorn(?:\s|$)/.test(haystack)
+    && /(?:^|\s)app\.main:app(?:\s|$)/.test(haystack)
+    && new RegExp(`(?:^|\\s)--port(?:=|\\s+)${port}(?:\\s|$)`).test(haystack)
+}
+
+export async function resolveBackendRoots(listenerPids, readProcess, identity) {
+  const roots = new Map()
+  const conflicts = []
+
+  for (const listenerPid of listenerPids) {
+    const visited = new Set()
+    let pid = listenerPid
+    let root = null
+
+    while (pid > 1 && !visited.has(pid)) {
+      visited.add(pid)
+      const record = await readProcess(pid)
+      if (!record) break
+      if (isProjectBackendCommand(record.command, identity)) {
+        root = record
+        break
+      }
+      pid = record.parentPid
+    }
+
+    if (root) roots.set(root.pid, root)
+    else conflicts.push(listenerPid)
+  }
+
+  return { roots, conflicts }
+}
+
 export function terminateChild(
   child,
   signal,
