@@ -54,6 +54,42 @@ export async function resolveBackendRoots(listenerPids, readProcess, identity) {
   return { roots, conflicts }
 }
 
+export async function cleanupStaleBackend({
+  listListeners,
+  readProcess,
+  terminateRoot,
+  wait,
+  python,
+  port,
+  platform,
+  attempts = 20,
+}) {
+  const listenerPids = await listListeners()
+  if (listenerPids.length === 0) return
+
+  const { roots, conflicts } = await resolveBackendRoots(
+    listenerPids,
+    readProcess,
+    { python, port, platform },
+  )
+  if (conflicts.length > 0) {
+    throw new Error(
+      `端口 ${port} 被非本项目进程占用（PID ${conflicts.join(', ')}），未终止该进程。`,
+    )
+  }
+
+  for (const rootProcess of roots.values()) {
+    await terminateRoot(rootProcess)
+  }
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await wait(100)
+    if ((await listListeners()).length === 0) return
+  }
+
+  throw new Error(`本项目后端未能释放端口 ${port}。`)
+}
+
 export function terminateChild(
   child,
   signal,
