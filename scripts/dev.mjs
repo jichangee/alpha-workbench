@@ -1,8 +1,10 @@
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const execFileAsync = promisify(execFile)
 export const API_PORT = 8765
 
 function normalizedCommand(command, platform) {
@@ -90,6 +92,150 @@ export async function cleanupStaleBackend({
   throw new Error(`本项目后端未能释放端口 ${port}。`)
 }
 
+export function parsePidList(output) {
+  const pids = []
+
+  for (const line of output.split(/\r?\n/)) {
+    const value = line.trim()
+    if (!value) continue
+    if (!/^[1-9]\d*$/.test(value)) {
+      throw new Error(`无法解析监听进程 PID：${value}`)
+    }
+    pids.push(Number(value))
+  }
+
+  return [...new Set(pids)]
+}
+
+export function parsePosixProcessRecord(output) {
+  if (!output.trim()) return null
+  const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(output)
+  if (!match) throw new Error(`无法解析进程信息：${output.trim()}`)
+
+  return {
+    pid: Number(match[1]),
+    parentPid: Number(match[2]),
+    processGroupId: Number(match[3]),
+    command: match[4],
+  }
+}
+
+export function parseWindowsProcessRecord(output) {
+  const value = output.trim()
+  if (!value) return null
+  const match = /^(\d+)\t(\d+)\t(.+)$/.exec(value)
+  if (!match) throw new Error(`无法解析进程信息：${value}`)
+
+  return {
+    pid: Number(match[1]),
+    parentPid: Number(match[2]),
+    processGroupId: Number(match[1]),
+    command: match[3],
+  }
+}
+
+export async function listListeningPids(
+  port,
+  {
+    platform = process.platform,
+    execFileProcess = execFileAsync,
+  } = {},
+) {
+  try {
+    if (platform === 'win32') {
+      const script = [
+        `Get-NetTCPConnection -State Listen -LocalPort ${port} -ErrorAction SilentlyContinue`,
+        'Select-Object -ExpandProperty OwningProcess -Unique',
+      ].join(' | ')
+      const { stdout } = await execFileProcess(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', script],
+        { windowsHide: true },
+      )
+      return parsePidList(String(stdout))
+    }
+
+    const { stdout } = await execFileProcess(
+      'lsof',
+      ['-nP', '-t', `-iTCP:${port}`, '-sTCP:LISTEN'],
+      { windowsHide: true },
+    )
+    return parsePidList(String(stdout))
+  } catch (error) {
+    if (error?.code === 1 && !String(error.stdout ?? '').trim()) return []
+    throw error
+  }
+}
+
+export async function readProcessRecord(
+  pid,
+  {
+    platform = process.platform,
+    execFileProcess = execFileAsync,
+  } = {},
+) {
+  try {
+    if (platform === 'win32') {
+      const script = [
+        `$process = Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}'`,
+        'if ($process) { "$($process.ProcessId)`t$($process.ParentProcessId)`t$($process.CommandLine)" }',
+      ].join('; ')
+      const { stdout } = await execFileProcess(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', script],
+        { windowsHide: true },
+      )
+      return parseWindowsProcessRecord(String(stdout))
+    }
+
+    const { stdout } = await execFileProcess(
+      'ps',
+      ['-p', String(pid), '-o', 'pid=,ppid=,pgid=,command='],
+      { windowsHide: true },
+    )
+    return parsePosixProcessRecord(String(stdout))
+  } catch (error) {
+    if (error?.code === 1 && !String(error.stdout ?? '').trim()) return null
+    throw error
+  }
+}
+
+export async function terminateProcessRoot(
+  record,
+  {
+    platform = process.platform,
+    killProcess = process.kill,
+    spawnProcess = spawn,
+  } = {},
+) {
+  if (platform !== 'win32') {
+    try {
+      killProcess(-record.processGroupId, 'SIGTERM')
+    } catch (error) {
+      if (error?.code !== 'ESRCH') throw error
+    }
+    return
+  }
+
+  await new Promise((resolve, reject) => {
+    const taskkill = spawnProcess(
+      'taskkill',
+      ['/pid', String(record.pid), '/T', '/F'],
+      { stdio: 'ignore', windowsHide: true },
+    )
+    let settled = false
+    taskkill.once('error', (error) => {
+      settled = true
+      reject(error)
+    })
+    taskkill.once('close', (code) => {
+      if (settled) return
+      if (code === 0) resolve()
+      else reject(new Error(`taskkill 退出码 ${code ?? 1}`))
+    })
+  })
+}
+
 export function terminateChild(
   child,
   signal,
@@ -122,17 +268,34 @@ export function terminateChild(
   }
 }
 
-export function runLauncher({
+export async function runLauncher({
   platform = process.platform,
   spawnProcess = spawn,
   killProcess = process.kill,
   exitProcess = process.exit,
   schedule = setTimeout,
+  registerSignal = (signal, handler) => process.once(signal, handler),
+  cleanupBackend,
 } = {}) {
   const python = platform === 'win32'
     ? path.join(root, '.venv', 'Scripts', 'python.exe')
     : path.join(root, '.venv', 'bin', 'python')
   const npm = platform === 'win32' ? 'npm.cmd' : 'npm'
+  const performCleanup = cleanupBackend ?? (() => cleanupStaleBackend({
+    listListeners: () => listListeningPids(API_PORT, { platform }),
+    readProcess: (pid) => readProcessRecord(pid, { platform }),
+    terminateRoot: async (record) => {
+      console.log(`正在终止本项目残留 FastAPI 进程（PID ${record.pid}）……`)
+      await terminateProcessRoot(record, { platform, killProcess, spawnProcess })
+    },
+    wait: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    python,
+    port: API_PORT,
+    platform,
+  }))
+
+  await performCleanup()
+
   let shuttingDown = false
   let exitCode = 0
   const children = new Set()
@@ -178,8 +341,8 @@ export function runLauncher({
     })
   }
 
-  process.once('SIGINT', () => shutdown(130, 'SIGINT'))
-  process.once('SIGTERM', () => shutdown(143, 'SIGTERM'))
+  registerSignal('SIGINT', () => shutdown(130, 'SIGINT'))
+  registerSignal('SIGTERM', () => shutdown(143, 'SIGTERM'))
   start(
     'FastAPI',
     python,
@@ -190,5 +353,8 @@ export function runLauncher({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runLauncher()
+  runLauncher().catch((error) => {
+    console.error(`开发服务启动前检查失败：${error.message}`)
+    process.exit(1)
+  })
 }

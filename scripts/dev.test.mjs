@@ -1,18 +1,34 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import test from 'node:test'
 
 import {
   API_PORT,
   cleanupStaleBackend,
   isProjectBackendCommand,
+  listListeningPids,
+  parsePidList,
+  parsePosixProcessRecord,
+  parseWindowsProcessRecord,
   resolveBackendRoots,
+  runLauncher,
   terminateChild,
+  terminateProcessRoot,
 } from './dev.mjs'
 
 const identity = {
   python: '/workspace/huice/.venv/bin/python',
   port: 8765,
   platform: 'darwin',
+}
+
+function fakeChild(pid = 300) {
+  const child = new EventEmitter()
+  child.pid = pid
+  child.exitCode = null
+  child.signalCode = null
+  child.kill = () => {}
+  return child
 }
 
 test('launcher uses the project local API port', () => {
@@ -178,6 +194,134 @@ test('propagates process inspection failures without terminating anything', asyn
   )
 
   assert.equal(terminateCalls, 0)
+})
+
+test('parses unique positive listener PIDs and rejects malformed output', () => {
+  assert.deepEqual(parsePidList('100\n101\n100\n'), [100, 101])
+  assert.throws(() => parsePidList('100\nnot-a-pid\n'), /not-a-pid/)
+})
+
+test('parses a POSIX process record without truncating its command', () => {
+  assert.deepEqual(
+    parsePosixProcessRecord(
+      '  101   100   100 /workspace/.venv/bin/python -c from multiprocessing.spawn import spawn_main\n',
+    ),
+    {
+      pid: 101,
+      parentPid: 100,
+      processGroupId: 100,
+      command: '/workspace/.venv/bin/python -c from multiprocessing.spawn import spawn_main',
+    },
+  )
+  assert.equal(parsePosixProcessRecord(''), null)
+  assert.throws(() => parsePosixProcessRecord('malformed output'), /malformed output/)
+})
+
+test('parses a Windows process record without truncating its command', () => {
+  assert.deepEqual(
+    parseWindowsProcessRecord(
+      '101\t100\t"C:\\workspace\\huice\\.venv\\Scripts\\python.exe" -m uvicorn app.main:app --port 8765\r\n',
+    ),
+    {
+      pid: 101,
+      parentPid: 100,
+      processGroupId: 101,
+      command: '"C:\\workspace\\huice\\.venv\\Scripts\\python.exe" -m uvicorn app.main:app --port 8765',
+    },
+  )
+  assert.equal(parseWindowsProcessRecord(''), null)
+  assert.throws(() => parseWindowsProcessRecord('malformed output'), /malformed output/)
+})
+
+test('treats lsof exit code 1 with empty output as no listeners', async () => {
+  const noListenerError = new Error('no matches')
+  noListenerError.code = 1
+  noListenerError.stdout = ''
+
+  assert.deepEqual(
+    await listListeningPids(8765, {
+      platform: 'darwin',
+      execFileProcess: async () => { throw noListenerError },
+    }),
+    [],
+  )
+})
+
+test('does not spawn either service until backend cleanup completes', async () => {
+  let releaseCleanup
+  const cleanupGate = new Promise((resolve) => { releaseCleanup = resolve })
+  const spawned = []
+  const launchPromise = runLauncher({
+    cleanupBackend: async () => cleanupGate,
+    spawnProcess(command, args, options) {
+      spawned.push({ command, args, options })
+      return fakeChild(300 + spawned.length)
+    },
+    exitProcess() {},
+    registerSignal() {},
+  })
+
+  await Promise.resolve()
+  assert.equal(spawned.length, 0)
+  releaseCleanup()
+  await launchPromise
+  assert.equal(spawned.length, 2)
+})
+
+test('does not spawn services when backend cleanup fails', async () => {
+  const spawned = []
+
+  await assert.rejects(
+    runLauncher({
+      cleanupBackend: async () => { throw new Error('inspection failed') },
+      spawnProcess(...args) {
+        spawned.push(args)
+        return fakeChild()
+      },
+      exitProcess() {},
+      registerSignal() {},
+    }),
+    /inspection failed/,
+  )
+
+  assert.equal(spawned.length, 0)
+})
+
+test('POSIX root cleanup signals the verified process group', async () => {
+  const calls = []
+
+  await terminateProcessRoot(
+    { pid: 100, parentPid: 1, processGroupId: 100, command: 'verified' },
+    {
+      platform: 'darwin',
+      killProcess: (pid, signal) => calls.push({ pid, signal }),
+    },
+  )
+
+  assert.deepEqual(calls, [{ pid: -100, signal: 'SIGTERM' }])
+})
+
+test('Windows root cleanup waits for taskkill to finish', async () => {
+  const calls = []
+
+  await terminateProcessRoot(
+    { pid: 4321, parentPid: 1, processGroupId: 4321, command: 'verified' },
+    {
+      platform: 'win32',
+      spawnProcess(command, args, options) {
+        calls.push({ command, args, options })
+        const child = new EventEmitter()
+        queueMicrotask(() => child.emit('close', 0))
+        return child
+      },
+    },
+  )
+
+  assert.deepEqual(calls, [{
+    command: 'taskkill',
+    args: ['/pid', '4321', '/T', '/F'],
+    options: { stdio: 'ignore', windowsHide: true },
+  }])
 })
 
 test('Windows launcher cleanup uses taskkill for the whole child process tree', () => {
