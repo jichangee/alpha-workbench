@@ -1,4 +1,5 @@
 import { formatCurrency, formatInteger, formatNumber, formatPercent } from '../formatters'
+import { useI18n } from '../i18n'
 import type { BacktestMetrics } from '../types'
 import { Card, CardContent } from './ui/card'
 import { cn } from '../lib/utils'
@@ -19,19 +20,22 @@ function metricTone(value: number | null): MetricDefinition['tone'] {
 }
 
 export function MetricCards({ metrics }: MetricCardsProps) {
+  const { locale } = useI18n()
+  const isEn = locale === 'en'
+
   const cards: MetricDefinition[] = [
-    { label: '期末净值', value: formatCurrency(metrics.endingEquity), tone: metricTone(metrics.totalReturn) },
-    { label: '总收益率', value: formatPercent(metrics.totalReturn), tone: metricTone(metrics.totalReturn) },
-    { label: '年化收益率', value: formatPercent(metrics.cagr), tone: metricTone(metrics.cagr) },
-    { label: '年化波动率', value: formatPercent(metrics.annualizedVolatility) },
-    { label: '夏普比率', value: formatNumber(metrics.sharpeRatio), tone: metricTone(metrics.sharpeRatio) },
-    { label: '最大回撤', value: formatPercent(metrics.maxDrawdown), tone: metricTone(metrics.maxDrawdown) },
-    { label: '已平仓交易', value: formatInteger(metrics.tradeCount) },
-    { label: '胜率', value: formatPercent(metrics.winRate), tone: metricTone(metrics.winRate) },
+    { label: isEn ? 'Ending Equity' : '期末净值', value: formatCurrency(metrics.endingEquity), tone: metricTone(metrics.totalReturn) },
+    { label: isEn ? 'Total Return' : '总收益率', value: formatPercent(metrics.totalReturn), tone: metricTone(metrics.totalReturn) },
+    { label: isEn ? 'CAGR' : '年化收益率', value: formatPercent(metrics.cagr), tone: metricTone(metrics.cagr) },
+    { label: isEn ? 'Annualized Volatility' : '年化波动率', value: formatPercent(metrics.annualizedVolatility) },
+    { label: isEn ? 'Sharpe Ratio' : '夏普比率', value: formatNumber(metrics.sharpeRatio), tone: metricTone(metrics.sharpeRatio) },
+    { label: isEn ? 'Max Drawdown' : '最大回撤', value: formatPercent(metrics.maxDrawdown), tone: metricTone(metrics.maxDrawdown) },
+    { label: isEn ? 'Closed Trades' : '已平仓交易', value: formatInteger(metrics.tradeCount) },
+    { label: isEn ? 'Win Rate' : '胜率', value: formatPercent(metrics.winRate), tone: metricTone(metrics.winRate) },
   ]
 
   return (
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="关键绩效指标">
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label={isEn ? 'Key performance metrics' : '关键绩效指标'}>
       {cards.map((card) => (
         <Card size="sm" className="bg-muted/20" key={card.label}>
           <CardContent>

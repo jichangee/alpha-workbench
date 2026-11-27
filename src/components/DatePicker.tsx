@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { zhCN } from 'date-fns/locale'
+import { enUS, zhCN } from 'date-fns/locale'
 import { CalendarDays } from 'lucide-react'
+import { useI18n } from '../i18n'
 import { cn } from '../lib/utils'
 import { Button } from './ui/button'
 import { Calendar } from './ui/calendar'
@@ -39,6 +40,8 @@ export function DatePicker({
   max,
   className,
 }: DatePickerProps) {
+  const { locale } = useI18n()
+  const isEn = locale === 'en'
   const [open, setOpen] = useState(false)
   const selected = parseLocalDate(value)
   const earliest = parseLocalDate(min)
@@ -55,26 +58,33 @@ export function DatePicker({
           className={cn('w-full justify-start font-mono font-normal', className)}
         >
           <CalendarDays aria-hidden="true" />
-          {value || '选择日期'}
+          {value || (isEn ? 'Select date' : '选择日期')}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
-          locale={zhCN}
+          locale={isEn ? enUS : zhCN}
           selected={selected}
           defaultMonth={selected}
           captionLayout="dropdown"
           startMonth={earliest}
           endMonth={latest}
-          labels={{
-            labelMonthDropdown: () => '选择月份',
-            labelYearDropdown: () => '选择年份',
-          }}
-          formatters={{
-            formatMonthDropdown: (date) => `${date.getMonth() + 1}月`,
-            formatYearDropdown: (date) => `${date.getFullYear()}年`,
-          }}
+          labels={isEn
+            ? {
+                labelMonthDropdown: () => 'Select month',
+                labelYearDropdown: () => 'Select year',
+              }
+            : {
+                labelMonthDropdown: () => '选择月份',
+                labelYearDropdown: () => '选择年份',
+              }}
+          formatters={isEn
+            ? undefined
+            : {
+                formatMonthDropdown: (date) => `${date.getMonth() + 1}月`,
+                formatYearDropdown: (date) => `${date.getFullYear()}年`,
+              }}
           disabled={[
             ...(earliest ? [{ before: earliest }] : []),
             ...(latest ? [{ after: latest }] : []),

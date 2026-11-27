@@ -1,3 +1,5 @@
+import { strategyDescription, strategyLabel, strategyParameterDescription, strategyParameterLabel } from '../displayLabels'
+import { useI18n } from '../i18n'
 import type { StrategyDefinition, StrategyParameter } from '../types'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -69,6 +71,8 @@ export function StrategyControls({
   onStrategyChange,
   onParamsChange,
 }: StrategyControlsProps) {
+  const { locale } = useI18n()
+  const isEn = locale === 'en'
   const strategy = strategies.find((candidate) => candidate.key === strategyKey)
 
   const updateParameter = (parameter: StrategyParameter, rawValue: string) => {
@@ -89,56 +93,67 @@ export function StrategyControls({
           if (value) onStrategyChange(value)
         }}
         className="grid grid-cols-2 gap-2"
-        aria-label="选择策略"
+        aria-label={isEn ? 'Select strategy' : '选择策略'}
       >
-        {strategies.map((candidate) => (
-          <ToggleGroupItem
-            className="h-auto min-h-11 justify-start px-3 py-2 text-left"
-            key={candidate.key}
-            value={candidate.key}
-            aria-label={candidate.name}
-          >
-            {candidate.name}
-          </ToggleGroupItem>
-        ))}
+        {strategies.map((candidate) => {
+          const label = isEn ? strategyLabel(candidate.key, 'en') : candidate.name
+          return (
+            <ToggleGroupItem
+              className="h-auto min-h-11 justify-start px-3 py-2 text-left"
+              key={candidate.key}
+              value={candidate.key}
+              aria-label={label}
+            >
+              {label}
+            </ToggleGroupItem>
+          )
+        })}
       </ToggleGroup>
 
-      {strategy && <p className="text-sm leading-6 text-muted-foreground">{strategy.description}</p>}
+      {strategy && (
+        <p className="text-sm leading-6 text-muted-foreground">
+          {strategyDescription(strategy.key, strategy.description, locale)}
+        </p>
+      )}
 
       {strategy && strategy.parameters.length > 0 && (
         <div className="grid gap-3">
-          {strategy.parameters.map((parameter) => (
-            <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3" key={parameter.key}>
-              <div className="flex items-center justify-between gap-3">
-                <Label htmlFor={`${parameter.key}-number`}>{parameter.name}</Label>
-                <Input
-                  id={`${parameter.key}-number`}
-                  className="h-9 w-20 font-mono"
-                  type="number"
-                  aria-label={`${parameter.name}数值`}
-                  inputMode="numeric"
-                  step={parameter.type === 'integer' ? 1 : 'any'}
+          {strategy.parameters.map((parameter) => {
+            const paramLabel = strategyParameterLabel(parameter.key, parameter.name, locale)
+            const paramDesc = strategyParameterDescription(parameter.key, parameter.description, locale)
+            return (
+              <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3" key={parameter.key}>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor={`${parameter.key}-number`}>{paramLabel}</Label>
+                  <Input
+                    id={`${parameter.key}-number`}
+                    className="h-9 w-20 font-mono"
+                    type="number"
+                    aria-label={isEn ? `${paramLabel} value` : `${paramLabel}数值`}
+                    inputMode="numeric"
+                    step={parameter.type === 'integer' ? 1 : 'any'}
+                    min={parameter.minimum}
+                    max={parameter.maximum}
+                    value={params[parameter.key]}
+                    onChange={(event) => updateParameter(parameter, event.target.value)}
+                  />
+                </div>
+                <Slider
+                  aria-label={isEn ? `${paramLabel} slider` : `${paramLabel}滑块`}
+                  step={parameter.type === 'integer' ? 1 : 0.01}
                   min={parameter.minimum}
                   max={parameter.maximum}
-                  value={params[parameter.key]}
-                  onChange={(event) => updateParameter(parameter, event.target.value)}
+                  value={[params[parameter.key]]}
+                  onValueChange={([value]) => updateParameter(parameter, String(value))}
                 />
+                <div className="flex justify-between font-mono text-[0.68rem] text-muted-foreground" aria-hidden="true">
+                  <span>{parameter.minimum}</span>
+                  <span>{parameter.maximum}</span>
+                </div>
+                <p className="text-xs leading-5 text-muted-foreground">{paramDesc}</p>
               </div>
-              <Slider
-                aria-label={`${parameter.name}滑块`}
-                step={parameter.type === 'integer' ? 1 : 0.01}
-                min={parameter.minimum}
-                max={parameter.maximum}
-                value={[params[parameter.key]]}
-                onValueChange={([value]) => updateParameter(parameter, String(value))}
-              />
-              <div className="flex justify-between font-mono text-[0.68rem] text-muted-foreground" aria-hidden="true">
-                <span>{parameter.minimum}</span>
-                <span>{parameter.maximum}</span>
-              </div>
-              <p className="text-xs leading-5 text-muted-foreground">{parameter.description}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

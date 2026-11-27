@@ -3,6 +3,7 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, MarkPointComponent, TooltipComponent } from 'echarts/components'
 import { init, use } from 'echarts/core'
 import { SVGRenderer } from 'echarts/renderers'
+import { useI18n } from '../i18n'
 import type { PortfolioComparisonResponse } from '../types'
 
 use([LineChart, GridComponent, LegendComponent, MarkPointComponent, TooltipComponent, SVGRenderer])
@@ -15,7 +16,7 @@ interface PortfolioComparisonChartProps {
 }
 
 interface RebalanceMarkPoint {
-  name: '再平衡'
+  name: string
   value: number
   coord: [string, number]
 }
@@ -29,7 +30,7 @@ interface MaximumDrawdown {
 }
 
 interface DrawdownMarkPoint {
-  name: '最大回撤起点' | '最大回撤终点'
+  name: string
   value: number
   coord: [string, number]
   symbol: 'diamond' | 'pin'
@@ -61,6 +62,8 @@ function findMaximumDrawdown(dates: string[], equity: number[]): MaximumDrawdown
 }
 
 export function PortfolioComparisonChart({ result }: PortfolioComparisonChartProps) {
+  const { locale } = useI18n()
+  const isEn = locale === 'en'
   const container = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -89,7 +92,7 @@ export function PortfolioComparisonChart({ result }: PortfolioComparisonChartPro
       yAxis: {
         type: 'value',
         scale: true,
-        name: '初始值 = 100',
+        name: isEn ? 'Base = 100' : '初始值 = 100',
         axisLabel: { formatter: (value: number) => value.toFixed(0) },
       },
       series: result.portfolios.map((portfolio, index) => {
@@ -98,19 +101,21 @@ export function PortfolioComparisonChart({ result }: PortfolioComparisonChartPro
           if (dateIndex === undefined) return []
           const equity = portfolio.equity[dateIndex]
           if (!Number.isFinite(equity)) return []
-          return [{ name: '再平衡', value: equity, coord: [date, equity] }]
+          return [{ name: isEn ? 'Rebalance' : '再平衡', value: equity, coord: [date, equity] }]
         })
         const maximumDrawdown = findMaximumDrawdown(result.dates, portfolio.equity)
+        const peakName = isEn ? 'Drawdown Peak' : '最大回撤起点'
+        const troughName = isEn ? 'Drawdown Trough' : '最大回撤终点'
         const drawdownPoints: DrawdownMarkPoint[] = maximumDrawdown
           ? [
               {
-                name: '最大回撤起点',
+                name: peakName,
                 value: maximumDrawdown.peakEquity,
                 coord: [maximumDrawdown.peakDate, maximumDrawdown.peakEquity],
                 symbol: 'diamond',
               },
               {
-                name: '最大回撤终点',
+                name: troughName,
                 value: maximumDrawdown.troughEquity,
                 coord: [maximumDrawdown.troughDate, maximumDrawdown.troughEquity],
                 symbol: 'pin',
@@ -135,13 +140,19 @@ export function PortfolioComparisonChart({ result }: PortfolioComparisonChartPro
             },
             tooltip: {
               formatter: ({ data }: { data: RebalanceMarkPoint | DrawdownMarkPoint }) => {
-                if (data.name === '最大回撤终点' && maximumDrawdown) {
-                  return `${portfolio.name}<br/>最大回撤 · ${maximumDrawdown.peakDate} → ${maximumDrawdown.troughDate}<br/>${(maximumDrawdown.percentage * 100).toFixed(2)}%`
+                if (data.name === troughName && maximumDrawdown) {
+                  return isEn
+                    ? `${portfolio.name}<br/>Max Drawdown · ${maximumDrawdown.peakDate} → ${maximumDrawdown.troughDate}<br/>${(maximumDrawdown.percentage * 100).toFixed(2)}%`
+                    : `${portfolio.name}<br/>最大回撤 · ${maximumDrawdown.peakDate} → ${maximumDrawdown.troughDate}<br/>${(maximumDrawdown.percentage * 100).toFixed(2)}%`
                 }
-                if (data.name === '最大回撤起点') {
-                  return `${portfolio.name}<br/>最大回撤起点 · ${data.coord[0]}<br/>净值 ${data.value.toFixed(2)}`
+                if (data.name === peakName) {
+                  return isEn
+                    ? `${portfolio.name}<br/>Drawdown Peak · ${data.coord[0]}<br/>Equity ${data.value.toFixed(2)}`
+                    : `${portfolio.name}<br/>最大回撤起点 · ${data.coord[0]}<br/>净值 ${data.value.toFixed(2)}`
                 }
-                return `${portfolio.name}<br/>再平衡 · ${data.coord[0]}<br/>净值 ${data.value.toFixed(2)}`
+                return isEn
+                  ? `${portfolio.name}<br/>Rebalance · ${data.coord[0]}<br/>Equity ${data.value.toFixed(2)}`
+                  : `${portfolio.name}<br/>再平衡 · ${data.coord[0]}<br/>净值 ${data.value.toFixed(2)}`
               },
             },
             data: [...rebalancePoints, ...drawdownPoints],
@@ -155,14 +166,16 @@ export function PortfolioComparisonChart({ result }: PortfolioComparisonChartPro
       window.removeEventListener('resize', resize)
       chart.dispose()
     }
-  }, [result])
+  }, [isEn, result])
 
   return (
     <div
       className="portfolio-chart-canvas"
       ref={container}
       role="img"
-      aria-label={`${result.portfolios.map((portfolio) => portfolio.name).join('、')}的归一化净值走势`}
+      aria-label={isEn
+        ? `Normalized equity curves for ${result.portfolios.map((portfolio) => portfolio.name).join(', ')}`
+        : `${result.portfolios.map((portfolio) => portfolio.name).join('、')}的归一化净值走势`}
     />
   )
 }

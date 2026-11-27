@@ -1,9 +1,10 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Database, LoaderCircle, Play, RefreshCw, Settings2 } from 'lucide-react'
 import { ApiError, previewMarketData, runBacktestForDataset } from '../api'
+import { strategyParameterLabel } from '../displayLabels'
+import { useI18n, type Locale } from '../i18n'
 import type { BacktestResponse, FormState, RunState, StrategyDefinition } from '../types'
 import { Alert, AlertDescription } from './ui/alert'
-import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -70,36 +71,46 @@ function relationshipIsValid(expression: string, params: Record<string, number>)
   }
 }
 
-function validateForm(form: FormState, strategy: StrategyDefinition | undefined): string | undefined {
-  if (!strategy) return '请选择策略。'
+function validateForm(form: FormState, strategy: StrategyDefinition | undefined, locale: Locale): string | undefined {
+  const isEn = locale === 'en'
+  if (!strategy) return isEn ? 'Please select a strategy.' : '请选择策略。'
   if (form.source === 'yahoo') {
-    if (!form.symbol.trim()) return '请输入股票代码。'
-    if (!form.start || !form.end) return '请输入开始和结束日期。'
-    if (form.start > form.end) return '结束日期不能早于开始日期。'
+    if (!form.symbol.trim()) return isEn ? 'Please enter a ticker symbol.' : '请输入股票代码。'
+    if (!form.start || !form.end) return isEn ? 'Please enter start and end dates.' : '请输入开始和结束日期。'
+    if (form.start > form.end) return isEn ? 'End date cannot be earlier than start date.' : '结束日期不能早于开始日期。'
   } else if (!form.file) {
-    return '请上传 CSV 文件。'
+    return isEn ? 'Please upload a CSV file.' : '请上传 CSV 文件。'
   }
   if (form.positionMode === 'rotate') {
-    if (!form.alternateSymbol.trim()) return '请输入替代股票代码。'
+    if (!form.alternateSymbol.trim()) return isEn ? 'Please enter an alternate ticker symbol.' : '请输入替代股票代码。'
     if (form.symbol.trim() && form.alternateSymbol.trim().toUpperCase() === form.symbol.trim().toUpperCase()) {
-      return '替代股票不能与主股票相同。'
+      return isEn ? 'Alternate symbol must differ from the primary symbol.' : '替代股票不能与主股票相同。'
     }
   }
 
   for (const parameter of strategy.parameters) {
     const value = form.params[parameter.key]
+    const label = strategyParameterLabel(parameter.key, parameter.name, locale)
     if (!Number.isFinite(value) || value < parameter.minimum || value > parameter.maximum) {
-      return `${parameter.name}必须在 ${parameter.minimum} 到 ${parameter.maximum} 之间。`
+      return isEn
+        ? `${label} must be between ${parameter.minimum} and ${parameter.maximum}.`
+        : `${parameter.name}必须在 ${parameter.minimum} 到 ${parameter.maximum} 之间。`
     }
-    if (parameter.type === 'integer' && !Number.isInteger(value)) return `${parameter.name}必须为整数。`
+    if (parameter.type === 'integer' && !Number.isInteger(value)) {
+      return isEn ? `${label} must be an integer.` : `${parameter.name}必须为整数。`
+    }
   }
   for (const rule of strategy.validationRules) {
     if (!relationshipIsValid(rule.expression, form.params)) return rule.message
   }
-  if (!Number.isFinite(form.initialCash) || form.initialCash <= 0) return '初始资金必须为正数。'
-  if (!Number.isFinite(form.commission) || form.commission < 0) return '佣金不能小于 0。'
+  if (!Number.isFinite(form.initialCash) || form.initialCash <= 0) {
+    return isEn ? 'Initial capital must be positive.' : '初始资金必须为正数。'
+  }
+  if (!Number.isFinite(form.commission) || form.commission < 0) {
+    return isEn ? 'Commission cannot be negative.' : '佣金不能小于 0。'
+  }
   if (!Number.isFinite(form.slippageBps) || form.slippageBps < 0 || form.slippageBps >= 10000) {
-    return '滑点基点必须在 0 到 10000 之间。'
+    return isEn ? 'Slippage (bps) must be between 0 and 10000.' : '滑点基点必须在 0 到 10000 之间。'
   }
 }
 
@@ -117,11 +128,14 @@ function backtestSignature(form: FormState): string {
   return JSON.stringify([form.strategyKey, sortedParams, form.initialCash, form.commission, form.slippageBps, form.positionMode])
 }
 
-function errorMessage(caught: unknown): string {
-  return caught instanceof ApiError ? caught.message : '网络连接失败，请检查服务后重试。'
+function errorMessage(caught: unknown, locale: Locale): string {
+  if (caught instanceof ApiError) return caught.message
+  return locale === 'en' ? 'Network request failed. Please check the service and retry.' : '网络连接失败，请检查服务后重试。'
 }
 
 export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormProps) {
+  const { locale } = useI18n()
+  const isEn = locale === 'en'
   const [form, setForm] = useState(() => initialForm(strategies))
   const [error, setError] = useState<string>()
   const [datasetId, setDatasetId] = useState<string>()
@@ -163,7 +177,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
   useEffect(() => {
     if (!datasetReady || !datasetId || currentBacktestSignature === lastRequestedSignature.current) return
 
-    const validationError = validateForm(form, strategy)
+    const validationError = validateForm(form, strategy, locale)
     if (validationError) {
       setError(validationError)
       onStateChange?.('error')
@@ -193,7 +207,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
         })
         .catch((caught: unknown) => {
           if (!controller?.signal.aborted) {
-            setError(errorMessage(caught))
+            setError(errorMessage(caught, locale))
             onStateChange?.('error')
           }
         })
@@ -210,7 +224,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       window.clearTimeout(timer)
       controller?.abort()
     }
-  }, [alternateDatasetId, currentBacktestSignature, currentMarketFingerprint, datasetId, datasetReady, form, onRun, onStateChange, strategy])
+  }, [alternateDatasetId, currentBacktestSignature, currentMarketFingerprint, datasetId, datasetReady, form, locale, onRun, onStateChange, strategy])
 
   const updateNumber = (field: 'initialCash' | 'commission' | 'slippageBps', value: string) => {
     setForm((current) => ({ ...current, [field]: Number(value) }))
@@ -228,7 +242,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const validationError = validateForm(form, strategy)
+    const validationError = validateForm(form, strategy, locale)
     if (validationError) {
       setError(validationError)
       onStateChange?.('error')
@@ -278,7 +292,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       }
     } catch (caught) {
       if (!controller.signal.aborted) {
-        setError(errorMessage(caught))
+        setError(errorMessage(caught, locale))
         onStateChange?.('error')
       }
     } finally {
@@ -297,8 +311,10 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
           <Settings2 className="size-4" aria-hidden="true" />
           <p className="text-xs font-semibold tracking-[0.16em]">BACKTEST CONFIG</p>
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">回测参数</h2>
-        <p className="text-sm leading-6 text-muted-foreground">配置一次可复现的历史模拟。</p>
+        <h2 className="text-2xl font-semibold tracking-tight">{isEn ? 'Backtest Parameters' : '回测参数'}</h2>
+        <p className="text-sm leading-6 text-muted-foreground">
+          {isEn ? 'Configure a reproducible historical simulation.' : '配置一次可复现的历史模拟。'}
+        </p>
       </div>
 
       <Separator />
@@ -306,10 +322,10 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       <fieldset className="space-y-4">
         <legend className="mb-4 flex items-center gap-2 text-sm font-semibold">
           <Database className="size-4 text-primary" aria-hidden="true" />
-          行情数据
+          {isEn ? 'Market Data' : '行情数据'}
         </legend>
         <div className="grid gap-2">
-          <Label htmlFor="market-source">数据来源</Label>
+          <Label htmlFor="market-source">{isEn ? 'Data Source' : '数据来源'}</Label>
           <Select
             value={form.source}
             onValueChange={(source: FormState['source']) => {
@@ -317,37 +333,45 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
               setError(undefined)
             }}
           >
-            <SelectTrigger id="market-source" aria-label="数据来源" className="w-full">
+            <SelectTrigger id="market-source" aria-label={isEn ? 'Data Source' : '数据来源'} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="yahoo">Yahoo Finance 自动下载</SelectItem>
-              <SelectItem value="csv">本地 CSV 文件</SelectItem>
+              <SelectItem value="yahoo">{isEn ? 'Yahoo Finance (Auto Download)' : 'Yahoo Finance 自动下载'}</SelectItem>
+              <SelectItem value="csv">{isEn ? 'Local CSV File' : '本地 CSV 文件'}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         {form.source === 'yahoo' ? (
           <div className="grid gap-4 md:grid-cols-3" key="yahoo-fields">
             <div className="grid gap-2">
-              <Label htmlFor="symbol">股票代码</Label>
-              <Input id="symbol" aria-label="股票代码" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="例如 SPY" />
-              <p className="text-xs leading-5 text-muted-foreground">支持美股和 ETF，例如 AAPL、SPY。</p>
+              <Label htmlFor="symbol">{isEn ? 'Ticker Symbol' : '股票代码'}</Label>
+              <Input
+                id="symbol"
+                aria-label={isEn ? 'Ticker Symbol' : '股票代码'}
+                value={form.symbol}
+                onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))}
+                placeholder={isEn ? 'e.g. SPY' : '例如 SPY'}
+              />
+              <p className="text-xs leading-5 text-muted-foreground">
+                {isEn ? 'Supports US stocks and ETFs, e.g. AAPL, SPY.' : '支持美股和 ETF，例如 AAPL、SPY。'}
+              </p>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="start-date">开始日期</Label>
+              <Label htmlFor="start-date">{isEn ? 'Start Date' : '开始日期'}</Label>
               <DatePicker
                 id="start-date"
-                aria-label="开始日期"
+                aria-label={isEn ? 'Start Date' : '开始日期'}
                 value={form.start}
                 max={form.end || undefined}
                 onChange={(start) => setForm((current) => ({ ...current, start }))}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="end-date">结束日期</Label>
+              <Label htmlFor="end-date">{isEn ? 'End Date' : '结束日期'}</Label>
               <DatePicker
                 id="end-date"
-                aria-label="结束日期"
+                aria-label={isEn ? 'End Date' : '结束日期'}
                 value={form.end}
                 min={form.start || undefined}
                 max={localDate(new Date())}
@@ -358,13 +382,27 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
         ) : (
           <div className="grid gap-4 md:grid-cols-2" key="csv-fields">
             <div className="grid gap-2">
-              <Label htmlFor="csv-file">CSV 文件</Label>
-              <Input id="csv-file" aria-label="CSV 文件" type="file" accept=".csv,text/csv" onChange={(event) => setForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))} />
-              <p className="text-xs leading-5 text-muted-foreground">需要包含 Date、Open、High、Low、Close 列。</p>
+              <Label htmlFor="csv-file">{isEn ? 'CSV File' : 'CSV 文件'}</Label>
+              <Input
+                id="csv-file"
+                aria-label={isEn ? 'CSV File' : 'CSV 文件'}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => setForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))}
+              />
+              <p className="text-xs leading-5 text-muted-foreground">
+                {isEn ? 'Requires Date, Open, High, Low, Close columns.' : '需要包含 Date、Open、High、Low、Close 列。'}
+              </p>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="optional-symbol">标的代码（可选）</Label>
-              <Input id="optional-symbol" aria-label="标的代码（可选）" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="留空时使用文件名" />
+              <Label htmlFor="optional-symbol">{isEn ? 'Symbol (Optional)' : '标的代码（可选）'}</Label>
+              <Input
+                id="optional-symbol"
+                aria-label={isEn ? 'Symbol (Optional)' : '标的代码（可选）'}
+                value={form.symbol}
+                onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))}
+                placeholder={isEn ? 'Uses filename if blank' : '留空时使用文件名'}
+              />
             </div>
           </div>
         )}
@@ -373,7 +411,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       <Separator />
 
       <fieldset className="space-y-4">
-        <legend className="mb-4 text-sm font-semibold">策略</legend>
+        <legend className="mb-4 text-sm font-semibold">{isEn ? 'Strategy' : '策略'}</legend>
         <StrategyControls
           strategies={strategies}
           strategyKey={form.strategyKey}
@@ -389,7 +427,7 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
       <Separator />
 
       <fieldset className="space-y-4">
-        <legend className="mb-4 text-sm font-semibold">交易假设</legend>
+        <legend className="mb-4 text-sm font-semibold">{isEn ? 'Trading Assumptions' : '交易假设'}</legend>
         <PositionModeControls
           mode={form.positionMode}
           alternateSymbol={form.alternateSymbol}
@@ -404,16 +442,16 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
         />
         <div className="grid gap-4 md:grid-cols-3">
           <div className="grid gap-2">
-            <Label htmlFor="initial-cash">初始资金（美元）</Label>
-            <Input id="initial-cash" className="font-mono" aria-label="初始资金（美元）" type="number" min="1" step="1000" value={form.initialCash} onChange={(event) => updateNumber('initialCash', event.target.value)} />
+            <Label htmlFor="initial-cash">{isEn ? 'Initial Capital ($)' : '初始资金（美元）'}</Label>
+            <Input id="initial-cash" className="font-mono" aria-label={isEn ? 'Initial Capital ($)' : '初始资金（美元）'} type="number" min="1" step="1000" value={form.initialCash} onChange={(event) => updateNumber('initialCash', event.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="commission">单笔佣金（美元）</Label>
-            <Input id="commission" className="font-mono" aria-label="单笔佣金（美元）" type="number" min="0" step="0.01" value={form.commission} onChange={(event) => updateNumber('commission', event.target.value)} />
+            <Label htmlFor="commission">{isEn ? 'Commission ($)' : '单笔佣金（美元）'}</Label>
+            <Input id="commission" className="font-mono" aria-label={isEn ? 'Commission ($)' : '单笔佣金（美元）'} type="number" min="0" step="0.01" value={form.commission} onChange={(event) => updateNumber('commission', event.target.value)} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="slippage">滑点（基点）</Label>
-            <Input id="slippage" className="font-mono" aria-label="滑点（基点）" type="number" min="0" max="9999" step="1" value={form.slippageBps} onChange={(event) => updateNumber('slippageBps', event.target.value)} />
+            <Label htmlFor="slippage">{isEn ? 'Slippage (bps)' : '滑点（基点）'}</Label>
+            <Input id="slippage" className="font-mono" aria-label={isEn ? 'Slippage (bps)' : '滑点（基点）'} type="number" min="0" max="9999" step="1" value={form.slippageBps} onChange={(event) => updateNumber('slippageBps', event.target.value)} />
           </div>
         </div>
       </fieldset>
@@ -431,14 +469,20 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
             <Play aria-hidden="true" />
           )}
           {runningMode === 'loading'
-            ? form.positionMode === 'rotate' ? '正在装载两只股票…' : '正在装载行情…'
-            : form.positionMode === 'rotate' ? '加载两只股票并开始回测' : '加载行情并开始回测'}
+            ? (form.positionMode === 'rotate'
+              ? (isEn ? 'Loading both symbols…' : '正在装载两只股票…')
+              : (isEn ? 'Loading market data…' : '正在装载行情…'))
+            : (form.positionMode === 'rotate'
+              ? (isEn ? 'Load Both & Run Backtest' : '加载两只股票并开始回测')
+              : (isEn ? 'Load Data & Run Backtest' : '加载行情并开始回测'))}
         </Button>
       ) : (
         <Alert aria-live="polite" className="border-primary/30 bg-primary/5">
           <RefreshCw className={runningMode === 'automatic' ? 'animate-spin text-primary' : 'text-primary'} aria-hidden="true" />
           <AlertDescription>
-            {runningMode === 'automatic' ? '正在自动回测…' : '参数调整后自动回测'}
+            {runningMode === 'automatic'
+              ? (isEn ? 'Running automatic backtest…' : '正在自动回测…')
+              : (isEn ? 'Auto-updates when parameters change' : '参数调整后自动回测')}
           </AlertDescription>
         </Alert>
       )}

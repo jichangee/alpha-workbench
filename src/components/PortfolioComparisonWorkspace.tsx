@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, comparePortfolios } from '../api'
+import { useI18n, type Locale } from '../i18n'
 import type { PortfolioComparisonInput, PortfolioComparisonResponse } from '../types'
 import { Alert, AlertDescription } from './ui/alert'
 import { Badge } from './ui/badge'
@@ -10,12 +11,14 @@ import { PortfolioComparisonResults } from './PortfolioComparisonResults'
 
 type ComparisonState = 'idle' | 'running' | 'success' | 'error'
 
-export function portfolioComparisonErrorMessage(caught: unknown): string {
+export function portfolioComparisonErrorMessage(caught: unknown, locale: Locale = 'zh'): string {
   if (caught instanceof ApiError) return caught.message
-  return '网络连接失败，请检查服务后重试。'
+  return locale === 'en' ? 'Network request failed. Please check the service and retry.' : '网络连接失败，请检查服务后重试。'
 }
 
 export function PortfolioComparisonWorkspace() {
+  const { locale } = useI18n()
+  const isEn = locale === 'en'
   const [state, setState] = useState<ComparisonState>('idle')
   const [result, setResult] = useState<PortfolioComparisonResponse>()
   const [error, setError] = useState<string>()
@@ -34,7 +37,7 @@ export function PortfolioComparisonWorkspace() {
     try {
       pending = comparePortfolios(input, controller.signal)
     } catch (caught: unknown) {
-      setError(portfolioComparisonErrorMessage(caught))
+      setError(portfolioComparisonErrorMessage(caught, locale))
       setState('error')
       activeRequest.current = null
       return
@@ -48,7 +51,7 @@ export function PortfolioComparisonWorkspace() {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted || activeRequest.current !== controller) return
-        setError(portfolioComparisonErrorMessage(caught))
+        setError(portfolioComparisonErrorMessage(caught, locale))
         setState('error')
       })
       .finally(() => {
@@ -57,7 +60,7 @@ export function PortfolioComparisonWorkspace() {
   }
 
   return (
-    <section className="grid items-start gap-6 xl:grid-cols-[minmax(520px,610px)_minmax(0,1fr)]" aria-label="持仓对比工作区">
+    <section className="grid items-start gap-6 xl:grid-cols-[minmax(520px,610px)_minmax(0,1fr)]" aria-label={isEn ? 'Portfolio comparison workspace' : '持仓对比工作区'}>
       <Card className="min-w-0">
         <PortfolioComparisonForm onCompare={compare} running={state === 'running'} />
         {error && (
@@ -74,12 +77,18 @@ export function PortfolioComparisonWorkspace() {
           <CardHeader className="my-auto">
             <Badge variant="outline" className="mb-4 w-fit">COMPARISON</Badge>
             <CardTitle className="text-3xl">
-              <h2>{state === 'running' ? '正在计算' : '等待持仓'}</h2>
+              <h2>
+                {state === 'running'
+                  ? (isEn ? 'Calculating' : '正在计算')
+                  : (isEn ? 'Awaiting Portfolios' : '等待持仓')}
+              </h2>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="max-w-md leading-7 text-muted-foreground">
-              {state === 'running' ? '正在对齐行情并计算两组持仓…' : '设置两组持仓并开始对比，即可查看同一起点的历史走势。'}
+              {state === 'running'
+                ? (isEn ? 'Aligning market data and calculating portfolio curves…' : '正在对齐行情并计算两组持仓…')
+                : (isEn ? 'Configure portfolios and run comparison to view normalized equity curves.' : '设置两组持仓并开始对比，即可查看同一起点的历史走势。')}
             </p>
             <div className="mt-10 grid grid-cols-3 items-end gap-3" aria-hidden="true">
               <Skeleton className="h-16" />

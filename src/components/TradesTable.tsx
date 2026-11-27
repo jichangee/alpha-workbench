@@ -1,4 +1,5 @@
 import { formatCurrency, formatPercent, formatSignedCurrency } from '../formatters'
+import { useI18n } from '../i18n'
 import type { BacktestTrade } from '../types'
 import { Alert, AlertDescription } from './ui/alert'
 import { Badge } from './ui/badge'
@@ -18,12 +19,14 @@ interface TradesTableProps {
 }
 
 export function TradesTable({ trades }: TradesTableProps) {
+  const { locale } = useI18n()
+  const isEn = locale === 'en'
   const hasOpenPosition = trades.some((trade) => trade.isOpen)
 
   if (trades.length === 0) {
     return (
       <Alert className="border-dashed bg-muted/20" role="status">
-        <AlertDescription className="text-center">尚无交易记录</AlertDescription>
+        <AlertDescription className="text-center">{isEn ? 'No trades recorded' : '尚无交易记录'}</AlertDescription>
       </Alert>
     )
   }
@@ -32,22 +35,36 @@ export function TradesTable({ trades }: TradesTableProps) {
     <div className="space-y-4">
       {hasOpenPosition && (
         <Alert className="border-primary/30 bg-primary/5" role="status">
-          <AlertDescription className="text-primary">当前持仓尚未平仓</AlertDescription>
+          <AlertDescription className="text-primary">
+            {isEn ? 'Position is still open at the end of the period' : '当前持仓尚未平仓'}
+          </AlertDescription>
         </Alert>
       )}
-      <div tabIndex={0} aria-label="交易明细，可横向滚动">
+      <div tabIndex={0} aria-label={isEn ? 'Trade details, horizontally scrollable' : '交易明细，可横向滚动'}>
         <Table className="min-w-[860px] font-mono text-xs">
-          <TableCaption className="sr-only">交易明细</TableCaption>
+          <TableCaption className="sr-only">{isEn ? 'Trade Details' : '交易明细'}</TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead>状态</TableHead><TableHead>标的</TableHead><TableHead>入场日期</TableHead><TableHead>出场日期</TableHead><TableHead>入场价</TableHead><TableHead>出场价</TableHead><TableHead>数量</TableHead><TableHead>毛盈亏</TableHead><TableHead>成本</TableHead><TableHead>净盈亏</TableHead><TableHead>收益率</TableHead>
+              <TableHead>{isEn ? 'Status' : '状态'}</TableHead>
+              <TableHead>{isEn ? 'Symbol' : '标的'}</TableHead>
+              <TableHead>{isEn ? 'Entry Date' : '入场日期'}</TableHead>
+              <TableHead>{isEn ? 'Exit Date' : '出场日期'}</TableHead>
+              <TableHead>{isEn ? 'Entry Price' : '入场价'}</TableHead>
+              <TableHead>{isEn ? 'Exit Price' : '出场价'}</TableHead>
+              <TableHead>{isEn ? 'Shares' : '数量'}</TableHead>
+              <TableHead>{isEn ? 'Gross PnL' : '毛盈亏'}</TableHead>
+              <TableHead>{isEn ? 'Costs' : '成本'}</TableHead>
+              <TableHead>{isEn ? 'Net PnL' : '净盈亏'}</TableHead>
+              <TableHead>{isEn ? 'Return' : '收益率'}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
           {trades.map((trade, index) => (
             <TableRow key={`${trade.entryDate}-${trade.exitDate}-${index}`}>
               <TableCell>
-                <Badge variant={trade.isOpen ? 'outline' : 'secondary'}>{trade.isOpen ? '持仓中' : '已平仓'}</Badge>
+                <Badge variant={trade.isOpen ? 'outline' : 'secondary'}>
+                  {trade.isOpen ? (isEn ? 'Open' : '持仓中') : (isEn ? 'Closed' : '已平仓')}
+                </Badge>
               </TableCell>
               <TableCell>{trade.symbol ?? '—'}</TableCell>
               <TableCell>{trade.entryDate}</TableCell>

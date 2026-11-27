@@ -16,7 +16,7 @@ vi.mock('./api', () => ({ fetchStrategies: fetchStrategiesMock }))
 vi.mock('./components/BacktestForm', () => ({
   BacktestForm: ({ onRun }: { onRun: (result: BacktestResponse) => void }) => <button type="button" onClick={() => onRun(backtestResult)}>交付回测结果</button>,
 }))
-vi.mock('echarts/core', () => ({ init: () => ({ dispose: vi.fn(), resize: vi.fn(), setOption: vi.fn() }), use: vi.fn() }))
+vi.mock('echarts/core', () => ({ connect: vi.fn(), init: () => ({ dispose: vi.fn(), resize: vi.fn(), setOption: vi.fn() }), use: vi.fn() }))
 
 describe('App result integration', () => {
   beforeEach(() => {
@@ -48,5 +48,23 @@ describe('App result integration', () => {
     await user.click(screen.getByRole('tab', { name: '策略回测' }))
     expect(screen.getByRole('button', { name: '交付回测结果' })).toBeVisible()
     expect(screen.getByRole('tab', { name: '策略回测' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('toggles between Chinese and English UI', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '切换为英文' }))
+
+    expect(screen.getByRole('banner')).toHaveTextContent('US Equity Quantitative Research Workbench')
+    expect(screen.getByRole('tab', { name: 'Strategy Backtest' })).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Portfolio Comparison' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '交付回测结果' }))
+    expect(await screen.findByRole('region', { name: 'Backtest results' })).toHaveTextContent('Buy & Hold Backtest Results')
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Chinese' }))
+    expect(screen.getByRole('banner')).toHaveTextContent('美股量化研究台')
+    expect(await screen.findByRole('region', { name: '回测结果' })).toHaveTextContent('买入并持有 回测结果')
   })
 })
