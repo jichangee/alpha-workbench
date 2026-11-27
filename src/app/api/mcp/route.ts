@@ -15,7 +15,7 @@ function isAuthorized(request: Request): boolean {
 
 function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: 'us-stock-backtester',
+    name: 'alpha-workbench',
     version: '2.0.0',
   })
 
