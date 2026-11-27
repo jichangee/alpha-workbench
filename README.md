@@ -56,6 +56,8 @@ npm run start     # Start production server
 
 ## Environment Variables & Deployment
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjichangee%2Falpha-workbench&project-name=alpha-workbench&repository-name=alpha-workbench)
+
 The project supports zero-config deployment on Vercel (connected to the `master` branch for automatic deployments).
 
 To protect `/api/mcp` from unauthorized public access, set `MCP_AUTH_TOKEN` in `.env.local` or your Vercel project environment variables (see [.env.example](.env.example)):

@@ -56,6 +56,8 @@ npm run start     # 启动生产服务
 
 ## 环境变量与部署
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjichangee%2Falpha-workbench&project-name=alpha-workbench&repository-name=alpha-workbench)
+
 项目支持零配置部署到 Vercel（已连接 `master` 分支自动部署）。
 
 如需为 `/api/mcp` 接口启用鉴权，防止公网部署后被未授权调用，可参考 [.env.example](.env.example) 在本地 `.env.local` 或 Vercel 环境变量中配置：
