@@ -72,6 +72,9 @@ def test_downloads_each_unique_symbol_once_and_returns_curves(monkeypatch):
     assert payload["portfolios"][0]["equity"] == [100.0, 100.0, 110.0]
     assert payload["portfolios"][0]["metrics"]["totalReturn"] == 0.1
     assert "annualizedVolatility" in payload["portfolios"][0]["metrics"]
+    assert "sharpeRatio" in payload["portfolios"][0]["metrics"]
+    assert payload["portfolios"][0]["rebalanceFrequency"] == "none"
+    assert payload["portfolios"][0]["rebalanceDates"] == []
 
 
 def test_accepts_a_third_portfolio_without_redownloading_shared_symbols(monkeypatch):

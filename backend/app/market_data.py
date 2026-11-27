@@ -11,6 +11,7 @@ import yfinance as yf
 
 REQUIRED = ("Open", "High", "Low", "Close")
 CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache" / "market-data"
+PRICE_RANGE_RTOL = np.finfo(float).eps * 8
 
 
 class MarketDataError(ValueError):
@@ -50,12 +51,26 @@ def normalize_bars(frame: pd.DataFrame) -> pd.DataFrame:
         raise MarketDataError("行情价格必须大于 0")
     if (bars["High"] < bars["Low"]).any():
         raise MarketDataError("最高价必须不低于最低价")
-    if ((bars["Open"] < bars["Low"]) | (bars["Open"] > bars["High"])).any():
+    if _outside_price_range(bars["Open"], bars["Low"], bars["High"]).any():
         raise MarketDataError("开盘价必须位于最高价和最低价之间")
-    if ((bars["Close"] < bars["Low"]) | (bars["Close"] > bars["High"])).any():
+    if _outside_price_range(bars["Close"], bars["Low"], bars["High"]).any():
         raise MarketDataError("收盘价必须位于最高价和最低价之间")
 
+    bars["Open"] = bars["Open"].clip(lower=bars["Low"], upper=bars["High"])
+    bars["Close"] = bars["Close"].clip(lower=bars["Low"], upper=bars["High"])
     return bars
+
+
+def _outside_price_range(
+    price: pd.Series, low: pd.Series, high: pd.Series
+) -> pd.Series:
+    below = (price < low) & ~np.isclose(
+        price, low, rtol=PRICE_RANGE_RTOL, atol=0
+    )
+    above = (price > high) & ~np.isclose(
+        price, high, rtol=PRICE_RANGE_RTOL, atol=0
+    )
+    return below | above
 
 
 def load_yahoo(symbol: str, start: date, end: date) -> pd.DataFrame:

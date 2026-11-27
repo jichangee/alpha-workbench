@@ -9,6 +9,7 @@ StrategyKey = Literal["buy_hold", "sma_cross", "rsi_reversal", "donchian"]
 ParameterType = Literal["integer", "number"]
 MarketDataSource = Literal["yahoo", "csv"]
 PositionMode = Literal["cash", "rotate"]
+RebalanceFrequency = Literal["none", "monthly", "quarterly", "yearly", "threshold"]
 
 
 class StrategyConfig(BaseModel):
@@ -213,12 +214,24 @@ class PortfolioPosition(BaseModel):
 
 
 class PortfolioDefinition(BaseModel):
-    """An initial allocation that will be held without rebalancing."""
+    """An initial allocation and its periodic target-weight policy."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, populate_by_name=True)
 
     name: str = Field(min_length=1, max_length=40)
     positions: list[PortfolioPosition] = Field(min_length=1, max_length=8)
+    rebalance_frequency: RebalanceFrequency = Field(
+        default="none",
+        validation_alias="rebalanceFrequency",
+        serialization_alias="rebalanceFrequency",
+    )
+    rebalance_threshold: float = Field(
+        default=5,
+        gt=0,
+        le=100,
+        validation_alias="rebalanceThreshold",
+        serialization_alias="rebalanceThreshold",
+    )
 
     @model_validator(mode="after")
     def validate_positions(self) -> "PortfolioDefinition":
@@ -252,12 +265,18 @@ class PortfolioComparisonMetrics(BaseModel):
     annualized_volatility: float | None = Field(
         serialization_alias="annualizedVolatility"
     )
+    sharpe_ratio: float | None = Field(serialization_alias="sharpeRatio")
     max_drawdown: float | None = Field(serialization_alias="maxDrawdown")
 
 
 class PortfolioComparisonSeries(BaseModel):
     name: str
     positions: list[PortfolioPosition]
+    rebalance_frequency: RebalanceFrequency = Field(
+        serialization_alias="rebalanceFrequency"
+    )
+    rebalance_dates: list[date] = Field(serialization_alias="rebalanceDates")
+    rebalance_threshold: float = Field(serialization_alias="rebalanceThreshold")
     equity: list[float]
     metrics: PortfolioComparisonMetrics
 

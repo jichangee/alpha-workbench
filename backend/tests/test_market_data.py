@@ -2,6 +2,7 @@ from datetime import date, timedelta
 import inspect
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -49,6 +50,28 @@ def test_normalize_bars_rejects_close_outside_daily_range():
 
     with pytest.raises(MarketDataError, match="收盘价必须位于最高价和最低价之间"):
         normalize_bars(raw)
+
+
+@pytest.mark.parametrize(
+    ("price_column", "boundary_column", "direction"),
+    [
+        ("Open", "High", np.inf),
+        ("Open", "Low", -np.inf),
+        ("Close", "High", np.inf),
+        ("Close", "Low", -np.inf),
+    ],
+)
+def test_normalize_bars_clamps_one_ulp_price_range_residue(
+    price_column, boundary_column, direction
+):
+    raw = valid_frame().astype(float)
+    index = raw.index[0]
+    boundary = float(raw.loc[index, boundary_column])
+    raw.loc[index, price_column] = np.nextafter(boundary, direction)
+
+    bars = normalize_bars(raw)
+
+    assert bars.loc[index, price_column] == boundary
 
 
 def test_dataset_store_isolates_stored_and_returned_frames():
