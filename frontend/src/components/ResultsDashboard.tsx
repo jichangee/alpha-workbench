@@ -1,4 +1,9 @@
 import { lazy, Suspense, useState } from 'react'
+import { Alert, AlertDescription } from './ui/alert'
+import { Badge } from './ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Skeleton } from './ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { strategyLabel } from '../displayLabels'
 import { MetricCards } from './MetricCards'
 import { TradesTable } from './TradesTable'
@@ -20,47 +25,72 @@ export function ResultsDashboard({ result }: ResultsDashboardProps) {
     { id: 'equity', label: '绩效走势' },
     { id: 'price', label: '价格与信号' },
   ]
-  const title = tabs.find((tab) => tab.id === activeTab)?.label
   const symbolPair = result.metadata.positionMode === 'rotate' && result.metadata.alternateSymbol
     ? `${result.metadata.primarySymbol ?? '主标的'} ↔ ${result.metadata.alternateSymbol}`
     : result.metadata.primarySymbol
 
   return (
-    <section className="results-dashboard" aria-label="回测结果">
-      <header className="results-heading">
+    <section className="min-w-0 space-y-4" aria-label="回测结果">
+      <Card>
+        <CardHeader className="border-b md:grid-cols-[1fr_auto] md:items-end">
         <div>
-          <p className="eyebrow">BACKTEST RESULTS</p>
-          <h2>{strategyLabel(result.metadata.strategyKey)} 回测结果</h2>
-          {symbolPair && <p className="result-symbols">{symbolPair}</p>}
+          <Badge variant="outline" className="mb-3 border-primary/40 text-primary">BACKTEST RESULTS</Badge>
+          <CardTitle className="text-2xl">
+            <h2>{strategyLabel(result.metadata.strategyKey)} 回测结果</h2>
+          </CardTitle>
+          {symbolPair && <p className="mt-2 font-mono text-xs font-semibold text-primary">{symbolPair}</p>}
         </div>
-        <p>{result.metadata.start} 至 {result.metadata.end} · 首日开盘建仓 · 后续次日开盘调仓</p>
-      </header>
-      <MetricCards metrics={result.metrics} />
-      {result.warnings.length > 0 && <p className="result-warning" role="status">{result.warnings.join(' ')}</p>}
+        <CardDescription className="mt-3 md:mt-0 md:text-right">
+          {result.metadata.start} 至 {result.metadata.end}<br />
+          首日开盘建仓 · 后续次日开盘调仓
+        </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <MetricCards metrics={result.metrics} />
+          {result.warnings.length > 0 && (
+            <Alert className="border-amber-500/30 bg-amber-500/5" role="status">
+              <AlertDescription className="text-amber-700">{result.warnings.join(' ')}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
-      <section className="chart-card" aria-labelledby="chart-heading">
-        <div className="chart-card-header"><h3 id="chart-heading">{title}</h3><div className="chart-tabs" aria-label="结果图表">
-          {tabs.map((tab) => <button key={tab.id} type="button" aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
-        </div></div>
-        <div>
-          <Suspense fallback={<p className="chart-loading" role="status">正在加载图表…</p>}>
-            {activeTab === 'equity' && <EquityChart result={result} />}
-            {activeTab === 'price' && <PriceChart result={result} />}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as DashboardTab)}>
+        <Card>
+          <CardHeader className="border-b md:grid-cols-[1fr_auto] md:items-center">
+            <CardTitle>表现分析</CardTitle>
+            <TabsList aria-label="结果图表" className="mt-3 w-full md:mt-0 md:w-auto">
+              {tabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id}>{tab.label}</TabsTrigger>)}
+            </TabsList>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<Skeleton className="h-[320px] w-full" role="status" aria-label="正在加载图表…" />}>
+              <TabsContent value="equity"><EquityChart result={result} /></TabsContent>
+              <TabsContent value="price"><PriceChart result={result} /></TabsContent>
+            </Suspense>
+          </CardContent>
+        </Card>
+      </Tabs>
+
+      <Card aria-labelledby="drawdown-heading">
+        <CardHeader className="border-b">
+          <CardTitle id="drawdown-heading">风险回撤</CardTitle>
+          <CardDescription>策略与基准从历史高点的回撤幅度。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Suspense fallback={<Skeleton className="h-[320px] w-full" role="status" aria-label="正在加载图表…" />}>
+            <DrawdownChart result={result} />
           </Suspense>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
-      <section className="chart-card drawdown-card" aria-labelledby="drawdown-heading">
-        <div className="chart-card-header"><h3 id="drawdown-heading">风险回撤</h3></div>
-        <Suspense fallback={<p className="chart-loading" role="status">正在加载图表…</p>}>
-          <DrawdownChart result={result} />
-        </Suspense>
-      </section>
-
-      <section className="trades-card" aria-labelledby="trades-heading">
-        <div><p className="eyebrow">TRADE DETAIL</p><h3 id="trades-heading">交易明细</h3></div>
-        <TradesTable trades={result.trades} />
-      </section>
+      <Card aria-labelledby="trades-heading">
+        <CardHeader className="border-b">
+          <Badge variant="outline" className="mb-2 w-fit">TRADE DETAIL</Badge>
+          <CardTitle id="trades-heading">交易明细</CardTitle>
+        </CardHeader>
+        <CardContent><TradesTable trades={result.trades} /></CardContent>
+      </Card>
     </section>
   )
 }

@@ -7,7 +7,7 @@ import { PortfolioComparisonForm } from './PortfolioComparisonForm'
 describe('PortfolioComparisonForm', () => {
   afterEach(() => vi.useRealTimers())
 
-  it('starts with the recommended portfolios and five complete calendar years', () => {
+  it('starts with the recommended portfolios and ends the range today', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 6, 17, 12))
 
@@ -20,8 +20,23 @@ describe('PortfolioComparisonForm', () => {
     expect(screen.getByLabelText('持仓 2 第 1 只股票代码')).toHaveValue('SOXX')
     expect(screen.getByLabelText('持仓 2 第 1 只股票权重')).toHaveValue(100)
     expect(screen.getAllByText('合计 100%')).toHaveLength(2)
-    expect(screen.getByLabelText('对比开始日期')).toHaveValue('2021-01-01')
-    expect(screen.getByLabelText('对比结束日期')).toHaveValue('2025-12-31')
+    expect(screen.getByRole('button', { name: '对比开始日期' })).toHaveTextContent('2021-01-01')
+    expect(screen.getByRole('button', { name: '对比结束日期' })).toHaveTextContent('2026-07-17')
+  })
+
+  it('submits a date selected from the calendar', async () => {
+    const user = userEvent.setup()
+    const onCompare = vi.fn()
+    const startYear = new Date().getFullYear() - 5
+    render(<PortfolioComparisonForm onCompare={onCompare} running={false} />)
+
+    await user.click(screen.getByRole('button', { name: '对比开始日期' }))
+    await user.click(screen.getByRole('button', { name: new RegExp(`${startYear}年1月15日`) }))
+    await user.click(screen.getByRole('button', { name: '开始对比' }))
+
+    expect(onCompare).toHaveBeenCalledWith(expect.objectContaining({
+      start: `${startYear}-01-15`,
+    }))
   })
 
   it('adds and removes stock rows while keeping at least one row', async () => {
@@ -61,9 +76,41 @@ describe('PortfolioComparisonForm', () => {
 
     expect(onCompare).toHaveBeenCalledWith(expect.objectContaining({
       portfolios: [
-        { name: '持仓 1', positions: [{ symbol: 'VOO', weight: 0.5 }, { symbol: 'QQQ', weight: 0.5 }] },
-        { name: '持仓 2', positions: [{ symbol: 'SOXX', weight: 1 }] },
+        { name: '持仓 1', rebalanceFrequency: 'none', positions: [{ symbol: 'VOO', weight: 0.5 }, { symbol: 'QQQ', weight: 0.5 }] },
+        { name: '持仓 2', rebalanceFrequency: 'none', positions: [{ symbol: 'SOXX', weight: 1 }] },
       ],
+    }))
+  })
+
+  it('submits an independent rebalance frequency for each portfolio', async () => {
+    const user = userEvent.setup()
+    const onCompare = vi.fn()
+    render(<PortfolioComparisonForm onCompare={onCompare} running={false} />)
+
+    await user.click(screen.getByRole('combobox', { name: '持仓 1 再平衡策略' }))
+    await user.click(screen.getByRole('option', { name: '每月再平衡' }))
+    await user.click(screen.getByRole('button', { name: '开始对比' }))
+
+    expect(onCompare.mock.calls[0][0].portfolios).toEqual([
+      expect.objectContaining({ rebalanceFrequency: 'monthly' }),
+      expect.objectContaining({ rebalanceFrequency: 'none' }),
+    ])
+  })
+
+  it('submits a drift threshold in percentage points for threshold rebalancing', async () => {
+    const user = userEvent.setup()
+    const onCompare = vi.fn()
+    render(<PortfolioComparisonForm onCompare={onCompare} running={false} />)
+
+    await user.click(screen.getByRole('combobox', { name: '持仓 1 再平衡策略' }))
+    await user.click(screen.getByRole('option', { name: '偏离阈值再平衡' }))
+    await user.clear(screen.getByLabelText('持仓 1 偏离阈值'))
+    await user.type(screen.getByLabelText('持仓 1 偏离阈值'), '10')
+    await user.click(screen.getByRole('button', { name: '开始对比' }))
+
+    expect(onCompare.mock.calls[0][0].portfolios[0]).toEqual(expect.objectContaining({
+      rebalanceFrequency: 'threshold',
+      rebalanceThreshold: 10,
     }))
   })
 
@@ -98,6 +145,7 @@ describe('PortfolioComparisonForm', () => {
     expect(onCompare.mock.calls[0][0].portfolios).toHaveLength(3)
     expect(onCompare.mock.calls[0][0].portfolios[2]).toEqual({
       name: '持仓 3',
+      rebalanceFrequency: 'none',
       positions: [{ symbol: 'AAPL', weight: 1 }],
     })
   })

@@ -23,13 +23,13 @@ describe('PositionModeControls', () => {
     const user = userEvent.setup()
     render(<Harness />)
 
-    expect(screen.getByRole('button', { name: '卖出后持有现金' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '卖出后持有现金' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.queryByLabelText('替代股票代码')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '卖出后换仓' }))
+    await user.click(screen.getByRole('radio', { name: '卖出后换仓' }))
     await user.type(screen.getByLabelText('替代股票代码'), 'qqq')
 
-    expect(screen.getByRole('button', { name: '卖出后换仓' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '卖出后换仓' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByLabelText('替代股票代码')).toHaveValue('QQQ')
   })
 })

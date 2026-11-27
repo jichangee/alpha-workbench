@@ -28,8 +28,8 @@ const comparisonInput: PortfolioComparisonInput = {
   start: '2021-01-01',
   end: '2025-12-31',
   portfolios: [
-    { name: '持仓 1', positions: [{ symbol: 'VOO', weight: 0.5 }, { symbol: 'QQQ', weight: 0.5 }] },
-    { name: '持仓 2', positions: [{ symbol: 'SOXX', weight: 1 }] },
+    { name: '持仓 1', rebalanceFrequency: 'monthly', positions: [{ symbol: 'VOO', weight: 0.5 }, { symbol: 'QQQ', weight: 0.5 }] },
+    { name: '持仓 2', rebalanceFrequency: 'none', positions: [{ symbol: 'SOXX', weight: 1 }] },
   ],
 }
 
@@ -38,8 +38,8 @@ const comparisonFixture: PortfolioComparisonResponse = {
   end: '2025-12-31',
   dates: ['2021-01-04', '2025-12-31'],
   portfolios: [
-    { ...comparisonInput.portfolios[0], equity: [100, 150], metrics: { totalReturn: 0.5, cagr: 0.085, annualizedVolatility: 0.16, maxDrawdown: -0.2 } },
-    { ...comparisonInput.portfolios[1], equity: [100, 180], metrics: { totalReturn: 0.8, cagr: 0.125, annualizedVolatility: 0.25, maxDrawdown: -0.32 } },
+    { ...comparisonInput.portfolios[0], rebalanceDates: ['2021-01-29', '2021-02-26'], equity: [100, 150], metrics: { totalReturn: 0.5, cagr: 0.085, annualizedVolatility: 0.16, sharpeRatio: 0.53, maxDrawdown: -0.2 } },
+    { ...comparisonInput.portfolios[1], rebalanceDates: [], equity: [100, 180], metrics: { totalReturn: 0.8, cagr: 0.125, annualizedVolatility: 0.25, sharpeRatio: 0.5, maxDrawdown: -0.32 } },
   ],
 }
 

@@ -1,5 +1,7 @@
 import { formatCurrency, formatInteger, formatNumber, formatPercent } from '../formatters'
 import type { BacktestMetrics } from '../types'
+import { Card, CardContent } from './ui/card'
+import { cn } from '../lib/utils'
 
 interface MetricCardsProps {
   metrics: BacktestMetrics
@@ -29,12 +31,20 @@ export function MetricCards({ metrics }: MetricCardsProps) {
   ]
 
   return (
-    <section className="metric-grid" aria-label="关键绩效指标">
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="关键绩效指标">
       {cards.map((card) => (
-        <article className="metric-card" key={card.label}>
-          <p>{card.label}</p>
-          <strong className={card.tone ? `metric-${card.tone}` : undefined}>{card.value}</strong>
-        </article>
+        <Card size="sm" className="bg-muted/20" key={card.label}>
+          <CardContent>
+            <p className="text-xs font-medium tracking-wide text-muted-foreground">{card.label}</p>
+            <strong className={cn(
+              'mt-2 block font-mono text-lg font-semibold tabular-nums',
+              card.tone === 'positive' && 'text-emerald-700',
+              card.tone === 'negative' && 'text-red-700',
+            )}>
+              {card.value}
+            </strong>
+          </CardContent>
+        </Card>
       ))}
     </section>
   )

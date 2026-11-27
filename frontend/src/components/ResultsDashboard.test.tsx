@@ -31,15 +31,15 @@ describe('ResultsDashboard', () => {
     expect(screen.getByText('当前持仓尚未平仓')).toBeVisible()
   })
 
-  it('switches chart views through pressed ordinary buttons', async () => {
+  it('switches chart views through semantic tabs', async () => {
     const user = userEvent.setup()
     render(<ResultsDashboard result={openPositionFixture} />)
 
-    await user.click(screen.getByRole('button', { name: '价格与信号' }))
+    await user.click(screen.getByRole('tab', { name: '价格与信号' }))
 
-    expect(screen.getByRole('button', { name: '价格与信号' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '绩效走势' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.queryByRole('button', { name: '风险回撤' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '价格与信号' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: '绩效走势' })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.queryByRole('tab', { name: '风险回撤' })).not.toBeInTheDocument()
     expect(await screen.findByRole('img', { name: '价格、技术指标及交易成交标记' })).toBeVisible()
     expect(await screen.findByRole('img', { name: '策略及基准回撤走势' })).toBeVisible()
   })
@@ -52,7 +52,7 @@ describe('ResultsDashboard', () => {
     }} />)
 
     expect(screen.getByRole('heading', { name: '均线交叉 回测结果' })).toBeVisible()
-    await user.click(screen.getByRole('button', { name: '价格与信号' }))
+    await user.click(screen.getByRole('tab', { name: '价格与信号' }))
     expect(await screen.findByText('短期均线')).toBeVisible()
     expect(screen.getByText('长期均线')).toBeVisible()
   })

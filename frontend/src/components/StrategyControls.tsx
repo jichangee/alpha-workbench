@@ -1,4 +1,8 @@
 import type { StrategyDefinition, StrategyParameter } from '../types'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Slider } from './ui/slider'
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group'
 
 interface StrategyControlsProps {
   strategies: readonly StrategyDefinition[]
@@ -76,32 +80,40 @@ export function StrategyControls({
   }
 
   return (
-    <div className="strategy-controls">
-      <div className="strategy-picker" role="group" aria-label="选择策略">
+    <div className="space-y-4">
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        value={strategyKey}
+        onValueChange={(value) => {
+          if (value) onStrategyChange(value)
+        }}
+        className="grid grid-cols-2 gap-2"
+        aria-label="选择策略"
+      >
         {strategies.map((candidate) => (
-          <button
-            className="strategy-option"
-            type="button"
+          <ToggleGroupItem
+            className="h-auto min-h-11 justify-start px-3 py-2 text-left"
             key={candidate.key}
-            aria-pressed={candidate.key === strategyKey}
-            onClick={() => onStrategyChange(candidate.key)}
+            value={candidate.key}
+            aria-label={candidate.name}
           >
             {candidate.name}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
-      {strategy && <p className="strategy-description">{strategy.description}</p>}
+      {strategy && <p className="text-sm leading-6 text-muted-foreground">{strategy.description}</p>}
 
       {strategy && strategy.parameters.length > 0 && (
-        <div className="parameter-sliders">
+        <div className="grid gap-3">
           {strategy.parameters.map((parameter) => (
-            <div className="parameter-slider" key={parameter.key}>
-              <div className="parameter-heading">
-                <label htmlFor={`${parameter.key}-range`}>{parameter.name}</label>
-                <input
+            <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3" key={parameter.key}>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor={`${parameter.key}-number`}>{parameter.name}</Label>
+                <Input
                   id={`${parameter.key}-number`}
-                  className="parameter-value"
+                  className="h-9 w-20 font-mono"
                   type="number"
                   aria-label={`${parameter.name}数值`}
                   inputMode="numeric"
@@ -112,22 +124,19 @@ export function StrategyControls({
                   onChange={(event) => updateParameter(parameter, event.target.value)}
                 />
               </div>
-              <input
-                id={`${parameter.key}-range`}
-                className="range-control"
-                type="range"
+              <Slider
                 aria-label={`${parameter.name}滑块`}
-                step={parameter.type === 'integer' ? 1 : 'any'}
+                step={parameter.type === 'integer' ? 1 : 0.01}
                 min={parameter.minimum}
                 max={parameter.maximum}
-                value={params[parameter.key]}
-                onChange={(event) => updateParameter(parameter, event.target.value)}
+                value={[params[parameter.key]]}
+                onValueChange={([value]) => updateParameter(parameter, String(value))}
               />
-              <div className="range-limits" aria-hidden="true">
+              <div className="flex justify-between font-mono text-[0.68rem] text-muted-foreground" aria-hidden="true">
                 <span>{parameter.minimum}</span>
                 <span>{parameter.maximum}</span>
               </div>
-              <small>{parameter.description}</small>
+              <p className="text-xs leading-5 text-muted-foreground">{parameter.description}</p>
             </div>
           ))}
         </div>

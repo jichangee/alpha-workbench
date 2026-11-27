@@ -1,5 +1,20 @@
 import { type FormEvent, useRef, useState } from 'react'
-import type { PortfolioComparisonInput, PortfolioDefinitionInput } from '../types'
+import { LoaderCircle, Plus, Scale, Trash2 } from 'lucide-react'
+import type {
+  PortfolioComparisonInput,
+  PortfolioDefinitionInput,
+  RebalanceFrequency,
+} from '../types'
+import { cn } from '../lib/utils'
+import { Alert, AlertDescription } from './ui/alert'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Card, CardContent, CardHeader } from './ui/card'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Separator } from './ui/separator'
+import { DatePicker } from './DatePicker'
 
 interface PortfolioComparisonFormProps {
   onCompare: (input: PortfolioComparisonInput) => void
@@ -16,6 +31,8 @@ interface PortfolioDraft {
   id: number
   number: number
   name: string
+  rebalanceFrequency: RebalanceFrequency
+  rebalanceThreshold: string
   positions: PositionDraft[]
 }
 
@@ -30,7 +47,7 @@ function initialDates(): { start: string; end: string } {
   const lastCompleteYear = now.getFullYear() - 1
   return {
     start: localDate(new Date(lastCompleteYear - 4, 0, 1)),
-    end: localDate(new Date(lastCompleteYear, 11, 31)),
+    end: localDate(now),
   }
 }
 
@@ -40,6 +57,8 @@ function initialPortfolios(): PortfolioDraft[] {
       id: 1,
       number: 1,
       name: '持仓 1',
+      rebalanceFrequency: 'none',
+      rebalanceThreshold: '5',
       positions: [
         { id: 1, symbol: 'VOO', weight: '50' },
         { id: 2, symbol: 'QQQ', weight: '50' },
@@ -49,6 +68,8 @@ function initialPortfolios(): PortfolioDraft[] {
       id: 2,
       number: 2,
       name: '持仓 2',
+      rebalanceFrequency: 'none',
+      rebalanceThreshold: '5',
       positions: [{ id: 3, symbol: 'SOXX', weight: '100' }],
     },
   ]
@@ -76,6 +97,12 @@ function validate(
 
   for (const portfolio of portfolios) {
     if (!portfolio.name.trim()) return '请输入持仓名称。'
+    if (portfolio.rebalanceFrequency === 'threshold') {
+      const threshold = Number(portfolio.rebalanceThreshold)
+      if (!Number.isFinite(threshold) || threshold <= 0 || threshold > 100) {
+        return '偏离阈值必须大于 0% 且不超过 100%。'
+      }
+    }
     const symbols = portfolio.positions.map((position) => position.symbol.trim().toUpperCase())
     if (symbols.some((symbol) => !symbol)) return '请输入股票代码。'
     if (new Set(symbols).size !== symbols.length) return '同一持仓不能重复添加股票。'
@@ -143,6 +170,8 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
       id: nextPortfolioId.current++,
       number: portfolioNumber,
       name: `持仓 ${portfolioNumber}`,
+      rebalanceFrequency: 'none',
+      rebalanceThreshold: '5',
       positions: [{
         id: nextPositionId.current++,
         symbol: '',
@@ -170,6 +199,10 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
 
     const normalized = portfolios.map<PortfolioDefinitionInput>((portfolio) => ({
       name: portfolio.name.trim(),
+      rebalanceFrequency: portfolio.rebalanceFrequency,
+      ...(portfolio.rebalanceFrequency === 'threshold'
+        ? { rebalanceThreshold: Number(portfolio.rebalanceThreshold) }
+        : {}),
       positions: portfolio.positions.map((position) => ({
         symbol: position.symbol.trim().toUpperCase(),
         weight: Number(position.weight) / 100,
@@ -183,127 +216,238 @@ export function PortfolioComparisonForm({ onCompare, running }: PortfolioCompari
   }
 
   return (
-    <form className="portfolio-form" onSubmit={submit} noValidate>
-      <div className="section-heading">
+    <form className="space-y-6 p-5 md:p-6" onSubmit={submit} noValidate>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow">PORTFOLIOS</p>
-          <h2>编辑 {portfolios.length} 组持仓</h2>
+          <Badge variant="outline" className="mb-3 border-primary/40 text-primary">PORTFOLIOS</Badge>
+          <h2 className="text-2xl font-semibold tracking-tight">编辑 {portfolios.length} 组持仓</h2>
         </div>
-        <p>首日按权重买入，之后不再平衡。</p>
+        <p className="max-w-xs text-sm leading-6 text-muted-foreground sm:text-right">
+          首日按权重配置，每组可独立选择再平衡周期。
+        </p>
       </div>
 
-      <div className="portfolio-date-grid">
-        <label>
-          <span>开始日期</span>
-          <input aria-label="对比开始日期" type="date" value={start} max={end} onChange={(event) => { setStart(event.target.value); setError(undefined) }} />
-        </label>
-        <label>
-          <span>结束日期</span>
-          <input aria-label="对比结束日期" type="date" value={end} min={start} max={localDate(new Date())} onChange={(event) => { setEnd(event.target.value); setError(undefined) }} />
-        </label>
+      <Separator />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="comparison-start">开始日期</Label>
+          <DatePicker
+            id="comparison-start"
+            aria-label="对比开始日期"
+            value={start}
+            max={end}
+            onChange={(value) => {
+              setStart(value)
+              setError(undefined)
+            }}
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="comparison-end">结束日期</Label>
+          <DatePicker
+            id="comparison-end"
+            aria-label="对比结束日期"
+            value={end}
+            min={start}
+            max={localDate(new Date())}
+            onChange={(value) => {
+              setEnd(value)
+              setError(undefined)
+            }}
+          />
+        </div>
       </div>
 
-      <div className="portfolio-editor-grid">
+      <div className="grid gap-4">
         {portfolios.map((portfolio, portfolioIndex) => {
           const total = totalWeight(portfolio)
           const totalIsValid = Math.abs(total - 100) <= 0.0001
           const portfolioLabel = `持仓 ${portfolio.number}`
           return (
-            <section className={`portfolio-card portfolio-editor-tone-${portfolioIndex + 1}`} key={portfolio.id} aria-label={`${portfolioLabel} 编辑器`}>
-              <div className="portfolio-card-heading">
-                <label className="portfolio-name-field">
-                  <span>持仓名称</span>
-                  <input
+            <Card
+              size="sm"
+              className={cn(
+                'border-l-2 bg-muted/10',
+                portfolioIndex === 0 && 'border-l-emerald-400',
+                portfolioIndex === 1 && 'border-l-orange-400',
+                portfolioIndex === 2 && 'border-l-blue-400',
+                portfolioIndex === 3 && 'border-l-fuchsia-400',
+                portfolioIndex === 4 && 'border-l-amber-400',
+              )}
+              key={portfolio.id}
+              aria-label={`${portfolioLabel} 编辑器`}
+            >
+              <CardHeader className="border-b sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="grid gap-2">
+                  <Label htmlFor={`portfolio-name-${portfolio.id}`}>持仓名称</Label>
+                  <Input
+                    id={`portfolio-name-${portfolio.id}`}
                     aria-label={`${portfolioLabel} 名称`}
+                    className="font-semibold"
                     value={portfolio.name}
                     maxLength={40}
                     onChange={(event) => updatePortfolio(portfolio.id, (current) => ({ ...current, name: event.target.value }))}
                   />
-                </label>
-                <button
-                  className="portfolio-remove-button"
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
                   aria-label={`删除${portfolioLabel}`}
                   disabled={portfolios.length <= 2}
                   onClick={() => removePortfolio(portfolio.id)}
                 >
+                  <Trash2 aria-hidden="true" data-icon="inline-start" />
                   删除此持仓
-                </button>
-              </div>
+                </Button>
+              </CardHeader>
 
-              <div className="position-column-labels" aria-hidden="true">
-                <span>股票代码</span><span>权重</span><span />
-              </div>
-              {portfolio.positions.map((position, positionIndex) => (
-                <div className="position-row" key={position.id}>
-                  <input
-                    aria-label={`${portfolioLabel} 第 ${positionIndex + 1} 只股票代码`}
-                    value={position.symbol}
-                    maxLength={15}
-                    placeholder="如 VOO"
-                    autoCapitalize="characters"
-                    onChange={(event) => updatePosition(portfolio.id, position.id, 'symbol', event.target.value.toUpperCase())}
-                  />
-                  <label className="weight-input">
-                    <input
-                      aria-label={`${portfolioLabel} 第 ${positionIndex + 1} 只股票权重`}
-                      type="number"
-                      min="0.01"
-                      max="100"
-                      step="0.01"
-                      value={position.weight}
-                      onChange={(event) => updatePosition(portfolio.id, position.id, 'weight', event.target.value)}
-                    />
-                    <span>%</span>
-                  </label>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={`删除${portfolioLabel} 第 ${positionIndex + 1} 只股票`}
-                    disabled={portfolio.positions.length === 1}
-                    onClick={() => removePosition(portfolio.id, position.id)}
+              <CardContent className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor={`rebalance-${portfolio.id}`}>再平衡策略</Label>
+                  <Select
+                    value={portfolio.rebalanceFrequency}
+                    onValueChange={(value) => updatePortfolio(portfolio.id, (current) => ({
+                      ...current,
+                      rebalanceFrequency: value as RebalanceFrequency,
+                    }))}
                   >
-                    ×
-                  </button>
+                    <SelectTrigger
+                      id={`rebalance-${portfolio.id}`}
+                      className="w-full"
+                      aria-label={`${portfolioLabel} 再平衡策略`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">不再平衡</SelectItem>
+                      <SelectItem value="monthly">每月再平衡</SelectItem>
+                      <SelectItem value="quarterly">每季度再平衡</SelectItem>
+                      <SelectItem value="yearly">每年再平衡</SelectItem>
+                      <SelectItem value="threshold">偏离阈值再平衡</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {portfolio.rebalanceFrequency === 'threshold' ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor={`rebalance-threshold-${portfolio.id}`}>偏离阈值（百分点）</Label>
+                      <div className="relative">
+                        <Input
+                          id={`rebalance-threshold-${portfolio.id}`}
+                          aria-label={`${portfolioLabel} 偏离阈值`}
+                          className="pr-7 font-mono"
+                          type="number"
+                          min="0.01"
+                          max="100"
+                          step="0.01"
+                          value={portfolio.rebalanceThreshold}
+                          onChange={(event) => updatePortfolio(portfolio.id, (current) => ({ ...current, rebalanceThreshold: event.target.value }))}
+                        />
+                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                      </div>
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        任一实际权重与目标权重相差达到此值时，于当日收盘后恢复目标权重，并从下一交易日起生效。
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      {portfolio.rebalanceFrequency === 'none'
+                        ? '首日按目标权重配置，之后不再调整。'
+                        : '周期末收盘后恢复目标权重，并从下一交易日起生效。'}
+                    </p>
+                  )}
                 </div>
-              ))}
 
-              <div className="portfolio-card-footer">
-                <button
-                  className="text-button"
-                  type="button"
-                  aria-label={`为${portfolioLabel} 添加股票`}
-                  disabled={portfolio.positions.length >= 8}
-                  onClick={() => addPosition(portfolio.id)}
-                >
-                  + 添加股票
-                </button>
-                <span className={`weight-total${totalIsValid ? '' : ' invalid'}`}>
-                  合计 {formattedTotal(total)}%
-                </span>
-              </div>
-            </section>
+                <div className="grid grid-cols-[minmax(0,1fr)_104px_32px] gap-2 px-1 text-xs font-medium text-muted-foreground" aria-hidden="true">
+                  <span>股票代码</span><span>权重</span><span />
+                </div>
+                <div className="space-y-2">
+                {portfolio.positions.map((position, positionIndex) => (
+                  <div className="grid grid-cols-[minmax(0,1fr)_104px_32px] items-center gap-2" key={position.id}>
+                    <Input
+                      aria-label={`${portfolioLabel} 第 ${positionIndex + 1} 只股票代码`}
+                      className="font-mono uppercase"
+                      value={position.symbol}
+                      maxLength={15}
+                      placeholder="如 VOO"
+                      autoCapitalize="characters"
+                      onChange={(event) => updatePosition(portfolio.id, position.id, 'symbol', event.target.value.toUpperCase())}
+                    />
+                    <div className="relative">
+                      <Input
+                        aria-label={`${portfolioLabel} 第 ${positionIndex + 1} 只股票权重`}
+                        className="pr-7 text-right font-mono"
+                        type="number"
+                        min="0.01"
+                        max="100"
+                        step="0.01"
+                        value={position.weight}
+                        onChange={(event) => updatePosition(portfolio.id, position.id, 'weight', event.target.value)}
+                      />
+                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      type="button"
+                      aria-label={`删除${portfolioLabel} 第 ${positionIndex + 1} 只股票`}
+                      disabled={portfolio.positions.length === 1}
+                      onClick={() => removePosition(portfolio.id, position.id)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </div>
+                ))}
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    aria-label={`为${portfolioLabel} 添加股票`}
+                    disabled={portfolio.positions.length >= 8}
+                    onClick={() => addPosition(portfolio.id)}
+                  >
+                    <Plus aria-hidden="true" data-icon="inline-start" />
+                    添加股票
+                  </Button>
+                  <Badge
+                    variant={totalIsValid ? 'secondary' : 'destructive'}
+                    className={cn('weight-total font-mono', !totalIsValid && 'invalid')}
+                  >
+                    合计 {formattedTotal(total)}%
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
           )
         })}
       </div>
 
-      <div className="portfolio-add-row">
-        <button
-          className="portfolio-add-button"
+      <div className="flex items-center justify-between gap-3 border-t pt-5">
+        <Button
+          variant="outline"
           type="button"
           aria-label="新增持仓"
           disabled={portfolios.length >= 5}
           onClick={addPortfolio}
         >
-          + 新增持仓
-        </button>
-        <span>{portfolios.length >= 5 ? '最多 5 组' : `当前 ${portfolios.length} / 5 组`}</span>
+          <Plus aria-hidden="true" data-icon="inline-start" />
+          新增持仓
+        </Button>
+        <span className="text-xs text-muted-foreground">{portfolios.length >= 5 ? '最多 5 组' : `当前 ${portfolios.length} / 5 组`}</span>
       </div>
 
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="primary-action" type="submit">
-        {running ? '重新对比' : '开始对比'}
-      </button>
+      {error && (
+        <Alert variant="destructive" role="alert">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <Button className="w-full sm:w-auto" type="submit">
+        {running
+          ? <><LoaderCircle className="animate-spin" aria-hidden="true" data-icon="inline-start" />重新对比</>
+          : <><Scale aria-hidden="true" data-icon="inline-start" />开始对比</>}
+      </Button>
     </form>
   )
 }

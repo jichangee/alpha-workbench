@@ -1,6 +1,21 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { Database, LoaderCircle, Play, RefreshCw, Settings2 } from 'lucide-react'
 import { ApiError, previewMarketData, runBacktestForDataset } from '../api'
 import type { BacktestResponse, FormState, RunState, StrategyDefinition } from '../types'
+import { Alert, AlertDescription } from './ui/alert'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select'
+import { Separator } from './ui/separator'
+import { DatePicker } from './DatePicker'
 import { PositionModeControls } from './PositionModeControls'
 import { StrategyControls } from './StrategyControls'
 
@@ -27,7 +42,7 @@ function initialForm(strategies: readonly StrategyDefinition[]): FormState {
     source: 'yahoo',
     symbol: 'SPY',
     start: localDate(new Date(firstCompleteYear, 0, 1)),
-    end: localDate(new Date(lastCompleteYear, 11, 31)),
+    end: localDate(now),
     file: null,
     positionMode: 'cash',
     alternateSymbol: '',
@@ -276,61 +291,89 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
   }
 
   return (
-    <form className="backtest-form" onSubmit={submit} noValidate>
-      <div className="form-heading">
-        <p className="eyebrow">配置一次可复现的模拟</p>
-        <h2>回测参数</h2>
+    <form className="space-y-6 p-5 md:p-6" onSubmit={submit} noValidate>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2 text-primary">
+          <Settings2 className="size-4" aria-hidden="true" />
+          <p className="text-xs font-semibold tracking-[0.16em]">BACKTEST CONFIG</p>
+        </div>
+        <h2 className="text-2xl font-semibold tracking-tight">回测参数</h2>
+        <p className="text-sm leading-6 text-muted-foreground">配置一次可复现的历史模拟。</p>
       </div>
 
-      <fieldset>
-        <legend>行情数据</legend>
-        <label>
-          数据来源
-          <select
-            aria-label="数据来源"
+      <Separator />
+
+      <fieldset className="space-y-4">
+        <legend className="mb-4 flex items-center gap-2 text-sm font-semibold">
+          <Database className="size-4 text-primary" aria-hidden="true" />
+          行情数据
+        </legend>
+        <div className="grid gap-2">
+          <Label htmlFor="market-source">数据来源</Label>
+          <Select
             value={form.source}
-            onChange={(event) => {
-              setForm((current) => ({ ...current, source: event.target.value as FormState['source'], file: null }))
+            onValueChange={(source: FormState['source']) => {
+              setForm((current) => ({ ...current, source, file: null }))
               setError(undefined)
             }}
           >
-            <option value="yahoo">Yahoo Finance 自动下载</option>
-            <option value="csv">本地 CSV 文件</option>
-          </select>
-        </label>
+            <SelectTrigger id="market-source" aria-label="数据来源" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="yahoo">Yahoo Finance 自动下载</SelectItem>
+              <SelectItem value="csv">本地 CSV 文件</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         {form.source === 'yahoo' ? (
-          <div className="field-grid" key="yahoo-fields">
-            <label>
-              股票代码
-              <input aria-label="股票代码" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="例如 SPY" />
-              <small>支持美股和 ETF 代码，例如 AAPL、SPY。</small>
-            </label>
-            <label>
-              开始日期
-              <input aria-label="开始日期" type="date" value={form.start} max={form.end || undefined} onChange={(event) => setForm((current) => ({ ...current, start: event.target.value }))} />
-            </label>
-            <label>
-              结束日期
-              <input aria-label="结束日期" type="date" value={form.end} min={form.start || undefined} max={localDate(new Date())} onChange={(event) => setForm((current) => ({ ...current, end: event.target.value }))} />
-            </label>
+          <div className="grid gap-4 md:grid-cols-3" key="yahoo-fields">
+            <div className="grid gap-2">
+              <Label htmlFor="symbol">股票代码</Label>
+              <Input id="symbol" aria-label="股票代码" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="例如 SPY" />
+              <p className="text-xs leading-5 text-muted-foreground">支持美股和 ETF，例如 AAPL、SPY。</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="start-date">开始日期</Label>
+              <DatePicker
+                id="start-date"
+                aria-label="开始日期"
+                value={form.start}
+                max={form.end || undefined}
+                onChange={(start) => setForm((current) => ({ ...current, start }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="end-date">结束日期</Label>
+              <DatePicker
+                id="end-date"
+                aria-label="结束日期"
+                value={form.end}
+                min={form.start || undefined}
+                max={localDate(new Date())}
+                onChange={(end) => setForm((current) => ({ ...current, end }))}
+              />
+            </div>
           </div>
         ) : (
-          <div className="field-grid" key="csv-fields">
-            <label>
-              CSV 文件
-              <input aria-label="CSV 文件" type="file" accept=".csv,text/csv" onChange={(event) => setForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))} />
-              <small>需要包含 Date、Open、High、Low、Close 列。</small>
-            </label>
-            <label>
-              标的代码（可选）
-              <input aria-label="标的代码（可选）" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="留空时使用文件名" />
-            </label>
+          <div className="grid gap-4 md:grid-cols-2" key="csv-fields">
+            <div className="grid gap-2">
+              <Label htmlFor="csv-file">CSV 文件</Label>
+              <Input id="csv-file" aria-label="CSV 文件" type="file" accept=".csv,text/csv" onChange={(event) => setForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))} />
+              <p className="text-xs leading-5 text-muted-foreground">需要包含 Date、Open、High、Low、Close 列。</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="optional-symbol">标的代码（可选）</Label>
+              <Input id="optional-symbol" aria-label="标的代码（可选）" value={form.symbol} onChange={(event) => setForm((current) => ({ ...current, symbol: event.target.value }))} placeholder="留空时使用文件名" />
+            </div>
           </div>
         )}
       </fieldset>
 
-      <fieldset>
-        <legend>策略</legend>
+      <Separator />
+
+      <fieldset className="space-y-4">
+        <legend className="mb-4 text-sm font-semibold">策略</legend>
         <StrategyControls
           strategies={strategies}
           strategyKey={form.strategyKey}
@@ -343,8 +386,10 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
         />
       </fieldset>
 
-      <fieldset>
-        <legend>交易假设</legend>
+      <Separator />
+
+      <fieldset className="space-y-4">
+        <legend className="mb-4 text-sm font-semibold">交易假设</legend>
         <PositionModeControls
           mode={form.positionMode}
           alternateSymbol={form.alternateSymbol}
@@ -357,34 +402,45 @@ export function BacktestForm({ strategies, onRun, onStateChange }: BacktestFormP
             setError(undefined)
           }}
         />
-        <div className="field-grid">
-          <label>
-            初始资金（美元）
-            <input aria-label="初始资金（美元）" type="number" min="1" step="1000" value={form.initialCash} onChange={(event) => updateNumber('initialCash', event.target.value)} />
-          </label>
-          <label>
-            单笔佣金（美元）
-            <input aria-label="单笔佣金（美元）" type="number" min="0" step="0.01" value={form.commission} onChange={(event) => updateNumber('commission', event.target.value)} />
-          </label>
-          <label>
-            滑点（基点）
-            <input aria-label="滑点（基点）" type="number" min="0" max="9999" step="1" value={form.slippageBps} onChange={(event) => updateNumber('slippageBps', event.target.value)} />
-          </label>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-2">
+            <Label htmlFor="initial-cash">初始资金（美元）</Label>
+            <Input id="initial-cash" className="font-mono" aria-label="初始资金（美元）" type="number" min="1" step="1000" value={form.initialCash} onChange={(event) => updateNumber('initialCash', event.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="commission">单笔佣金（美元）</Label>
+            <Input id="commission" className="font-mono" aria-label="单笔佣金（美元）" type="number" min="0" step="0.01" value={form.commission} onChange={(event) => updateNumber('commission', event.target.value)} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="slippage">滑点（基点）</Label>
+            <Input id="slippage" className="font-mono" aria-label="滑点（基点）" type="number" min="0" max="9999" step="1" value={form.slippageBps} onChange={(event) => updateNumber('slippageBps', event.target.value)} />
+          </div>
         </div>
       </fieldset>
 
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       {!datasetReady ? (
-        <button className="run-button" type="submit" disabled={runningMode !== null || strategies.length === 0}>
+        <Button className="w-full sm:w-auto" type="submit" disabled={runningMode !== null || strategies.length === 0}>
+          {runningMode === 'loading' ? (
+            <LoaderCircle className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Play aria-hidden="true" />
+          )}
           {runningMode === 'loading'
             ? form.positionMode === 'rotate' ? '正在装载两只股票…' : '正在装载行情…'
             : form.positionMode === 'rotate' ? '加载两只股票并开始回测' : '加载行情并开始回测'}
-        </button>
+        </Button>
       ) : (
-        <p className={`auto-run-status${runningMode === 'automatic' ? ' is-running' : ''}`} aria-live="polite">
-          <span aria-hidden="true" />
-          {runningMode === 'automatic' ? '正在自动回测…' : '参数调整后自动回测'}
-        </p>
+        <Alert aria-live="polite" className="border-primary/30 bg-primary/5">
+          <RefreshCw className={runningMode === 'automatic' ? 'animate-spin text-primary' : 'text-primary'} aria-hidden="true" />
+          <AlertDescription>
+            {runningMode === 'automatic' ? '正在自动回测…' : '参数调整后自动回测'}
+          </AlertDescription>
+        </Alert>
       )}
     </form>
   )

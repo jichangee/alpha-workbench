@@ -43,14 +43,14 @@ function Harness({ initialParams = { short_window: 20, long_window: 50 } }) {
 }
 
 describe('StrategyControls', () => {
-  it('renders strategies as pressed-state buttons and reveals the selected sliders', async () => {
+  it('renders strategies as radio options and reveals the selected sliders', async () => {
     const user = userEvent.setup()
     render(<Harness />)
 
-    expect(screen.getByRole('button', { name: '买入并持有' })).toHaveAttribute('aria-pressed', 'true')
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    expect(screen.getByRole('radio', { name: '买入并持有' })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
 
-    expect(screen.getByRole('button', { name: '均线交叉' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('radio', { name: '均线交叉' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByLabelText('短均线周期滑块')).toBeVisible()
     expect(screen.getByLabelText('长均线周期滑块')).toBeVisible()
   })
@@ -58,9 +58,9 @@ describe('StrategyControls', () => {
   it('pushes the long window up when the short window reaches it', async () => {
     const user = userEvent.setup()
     render(<Harness />)
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
 
-    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '50' } })
+    fireEvent.change(screen.getByLabelText('短均线周期数值'), { target: { value: '50' } })
 
     expect(screen.getByLabelText('短均线周期数值')).toHaveValue(50)
     expect(screen.getByLabelText('长均线周期数值')).toHaveValue(51)
@@ -69,9 +69,9 @@ describe('StrategyControls', () => {
   it('pulls the short window down when the long window reaches it', async () => {
     const user = userEvent.setup()
     render(<Harness initialParams={{ short_window: 20, long_window: 50 }} />)
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
 
-    fireEvent.change(screen.getByLabelText('长均线周期滑块'), { target: { value: '20' } })
+    fireEvent.change(screen.getByLabelText('长均线周期数值'), { target: { value: '20' } })
 
     expect(screen.getByLabelText('短均线周期数值')).toHaveValue(19)
     expect(screen.getByLabelText('长均线周期数值')).toHaveValue(20)

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, comparePortfolios } from '../api'
 import type { PortfolioComparisonInput, PortfolioComparisonResponse } from '../types'
+import { Alert, AlertDescription } from './ui/alert'
+import { Badge } from './ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Skeleton } from './ui/skeleton'
 import { PortfolioComparisonForm } from './PortfolioComparisonForm'
 import { PortfolioComparisonResults } from './PortfolioComparisonResults'
 
@@ -53,19 +57,37 @@ export function PortfolioComparisonWorkspace() {
   }
 
   return (
-    <section className="portfolio-workspace" aria-label="持仓对比工作区">
-      <aside className="configuration-panel portfolio-configuration">
+    <section className="grid items-start gap-6 xl:grid-cols-[minmax(520px,610px)_minmax(0,1fr)]" aria-label="持仓对比工作区">
+      <Card className="min-w-0">
         <PortfolioComparisonForm onCompare={compare} running={state === 'running'} />
-        {error && <p className="form-error comparison-api-error" role="alert">{error}</p>}
-      </aside>
+        {error && (
+          <CardContent>
+            <Alert variant="destructive" role="alert">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </CardContent>
+        )}
+      </Card>
 
       {result && state !== 'running' ? <PortfolioComparisonResults result={result} /> : (
-        <section className="results-placeholder portfolio-placeholder" aria-live="polite">
-          <p className="eyebrow">COMPARISON</p>
-          <h2>{state === 'running' ? '正在计算' : '等待持仓'}</h2>
-          <p>{state === 'running' ? '正在对齐行情并计算两组持仓…' : '设置两组持仓并开始对比，即可查看同一起点的历史走势。'}</p>
-          <div className="placeholder-grid" aria-hidden="true"><span /><span /><span /></div>
-        </section>
+        <Card className="min-h-[420px]" aria-live="polite">
+          <CardHeader className="my-auto">
+            <Badge variant="outline" className="mb-4 w-fit">COMPARISON</Badge>
+            <CardTitle className="text-3xl">
+              <h2>{state === 'running' ? '正在计算' : '等待持仓'}</h2>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="max-w-md leading-7 text-muted-foreground">
+              {state === 'running' ? '正在对齐行情并计算两组持仓…' : '设置两组持仓并开始对比，即可查看同一起点的历史走势。'}
+            </p>
+            <div className="mt-10 grid grid-cols-3 items-end gap-3" aria-hidden="true">
+              <Skeleton className="h-16" />
+              <Skeleton className="h-28" />
+              <Skeleton className="h-20" />
+            </div>
+          </CardContent>
+        </Card>
       )}
     </section>
   )

@@ -1,5 +1,6 @@
 export type MarketDataSource = 'yahoo' | 'csv'
 export type PositionMode = 'cash' | 'rotate'
+export type RebalanceFrequency = 'none' | 'monthly' | 'quarterly' | 'yearly' | 'threshold'
 
 export interface StrategyParameter {
   key: string
@@ -147,6 +148,8 @@ export interface PortfolioPositionInput {
 
 export interface PortfolioDefinitionInput {
   name: string
+  rebalanceFrequency: RebalanceFrequency
+  rebalanceThreshold?: number
   positions: PortfolioPositionInput[]
 }
 
@@ -160,10 +163,12 @@ export interface PortfolioComparisonMetrics {
   totalReturn: number | null
   cagr: number | null
   annualizedVolatility: number | null
+  sharpeRatio: number | null
   maxDrawdown: number | null
 }
 
 export interface PortfolioComparisonSeries extends PortfolioDefinitionInput {
+  rebalanceDates: string[]
   equity: number[]
   metrics: PortfolioComparisonMetrics
 }

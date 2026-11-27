@@ -80,21 +80,36 @@ describe('BacktestForm', () => {
   })
   afterEach(() => vi.useRealTimers())
 
-  it('defaults to the five complete calendar years using local dates', () => {
+  it('defaults to five years ago through today using local dates', () => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date(2026, 0, 1, 0, 30))
+    vi.setSystemTime(new Date(2026, 6, 17, 12))
 
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
 
-    expect(screen.getByLabelText('开始日期')).toHaveValue('2021-01-01')
-    expect(screen.getByLabelText('结束日期')).toHaveValue('2025-12-31')
+    expect(screen.getByRole('button', { name: '开始日期' })).toHaveTextContent('2021-01-01')
+    expect(screen.getByRole('button', { name: '结束日期' })).toHaveTextContent('2026-07-17')
+  })
+
+  it('loads market data with a date selected from the calendar', async () => {
+    const user = userEvent.setup()
+    const startYear = new Date().getFullYear() - 5
+    render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: '开始日期' }))
+    await user.click(screen.getByRole('button', { name: new RegExp(`${startYear}年1月15日`) }))
+    await user.click(screen.getByRole('button', { name: '加载行情并开始回测' }))
+
+    await waitFor(() => expect(previewMarketDataMock).toHaveBeenCalledWith(
+      expect.objectContaining({ start: `${startYear}-01-15` }),
+      expect.any(AbortSignal),
+    ))
   })
 
   it('uses strategy buttons and shows only the selected strategy sliders', async () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
 
     expect(screen.getByLabelText('短均线周期滑块')).toBeVisible()
     expect(screen.getByLabelText('长均线周期滑块')).toBeVisible()
@@ -104,9 +119,9 @@ describe('BacktestForm', () => {
   it('keeps the moving-average windows valid while a slider moves', async () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
 
-    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '50' } })
+    fireEvent.change(screen.getByLabelText('短均线周期数值'), { target: { value: '50' } })
 
     expect(screen.getByLabelText('长均线周期数值')).toHaveValue(51)
   })
@@ -115,7 +130,8 @@ describe('BacktestForm', () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
 
-    await user.selectOptions(screen.getByLabelText('数据来源'), 'csv')
+    await user.click(screen.getByRole('combobox', { name: '数据来源' }))
+    await user.click(screen.getByRole('option', { name: '本地 CSV 文件' }))
 
     expect(screen.getByLabelText('CSV 文件')).toBeVisible()
     expect(screen.queryByLabelText('开始日期')).not.toBeInTheDocument()
@@ -125,7 +141,7 @@ describe('BacktestForm', () => {
     const user = userEvent.setup()
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
 
-    await user.click(screen.getByRole('button', { name: '卖出后换仓' }))
+    await user.click(screen.getByRole('radio', { name: '卖出后换仓' }))
     await user.click(screen.getByRole('button', { name: '加载两只股票并开始回测' }))
     expect(screen.getByRole('alert')).toHaveTextContent('请输入替代股票代码。')
 
@@ -140,7 +156,7 @@ describe('BacktestForm', () => {
     previewMarketDataMock.mockReset()
     previewMarketDataMock.mockResolvedValueOnce(previewFixture).mockResolvedValueOnce(alternatePreview)
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
-    await user.click(screen.getByRole('button', { name: '卖出后换仓' }))
+    await user.click(screen.getByRole('radio', { name: '卖出后换仓' }))
     await user.type(screen.getByLabelText('替代股票代码'), 'qqq')
 
     await user.click(screen.getByRole('button', { name: '加载两只股票并开始回测' }))
@@ -158,7 +174,7 @@ describe('BacktestForm', () => {
       expect.any(AbortSignal),
     )
 
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
     await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
     expect(previewMarketDataMock).toHaveBeenCalledTimes(2)
     expect(runBacktestForDatasetMock).toHaveBeenLastCalledWith(
@@ -229,8 +245,8 @@ describe('BacktestForm', () => {
     render(<BacktestForm strategies={catalogFixture} onRun={vi.fn()} />)
     await loadMarketData()
 
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
-    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '25' } })
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
+    fireEvent.change(screen.getByLabelText('短均线周期数值'), { target: { value: '25' } })
 
     await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
     expect(previewMarketDataMock).toHaveBeenCalledTimes(1)
@@ -247,7 +263,7 @@ describe('BacktestForm', () => {
     render(<BacktestForm strategies={catalogFixture} onRun={onRun} />)
     await loadMarketData()
     onRun.mockClear()
-    await user.click(screen.getByRole('button', { name: '均线交叉' }))
+    await user.click(screen.getByRole('radio', { name: '均线交叉' }))
     await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(2), { timeout: 1000 })
     await waitFor(() => expect(onRun).toHaveBeenCalledTimes(1))
     onRun.mockClear()
@@ -255,11 +271,11 @@ describe('BacktestForm', () => {
     const stale = deferred<BacktestResponse>()
     const latest = deferred<BacktestResponse>()
     runBacktestForDatasetMock.mockReturnValueOnce(stale.promise).mockReturnValueOnce(latest.promise)
-    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '25' } })
+    fireEvent.change(screen.getByLabelText('短均线周期数值'), { target: { value: '25' } })
     await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(3), { timeout: 1000 })
     const staleSignal = runBacktestForDatasetMock.mock.calls[2][2] as AbortSignal
 
-    fireEvent.change(screen.getByLabelText('短均线周期滑块'), { target: { value: '30' } })
+    fireEvent.change(screen.getByLabelText('短均线周期数值'), { target: { value: '30' } })
     await waitFor(() => expect(runBacktestForDatasetMock).toHaveBeenCalledTimes(4), { timeout: 1000 })
     expect(staleSignal.aborted).toBe(true)
 

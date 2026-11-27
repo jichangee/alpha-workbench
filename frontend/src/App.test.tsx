@@ -27,6 +27,8 @@ describe('App result integration', () => {
     const user = userEvent.setup()
     render(<App />)
 
+    expect(screen.getByRole('banner')).toHaveTextContent('美股量化研究台')
+    expect(screen.getByText('本地运行')).toBeVisible()
     await user.click(await screen.findByRole('button', { name: '交付回测结果' }))
 
     expect(await screen.findByRole('region', { name: '回测结果' })).toHaveTextContent('买入并持有 回测结果')
